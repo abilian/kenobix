@@ -13,7 +13,9 @@ dynamic = [
 ]
 version = "5.0.0"
 requires-python = ">=3.9"
-dependencies = []
+dependencies = [
+    "cattrs>=25.3.0",
+]
 description = "High-performance document database with SQLite3 JSON optimization (15-665x faster than basic implementations). Based on KenobiDB by Harrison Erd."
 readme = "README.md"
 
@@ -87,4 +89,6 @@ dev = [
     "pytest>=8.3.4",
     "cattrs>=23.1.0",
     "ruff>=0.14.0",
+    "pyrefly>=0.36.2",
+    "nox>=2025.5.1",
 ]

@@ -19,6 +19,7 @@ Run with coverage:
 
 """
 
+import sqlite3
 import time
 from contextlib import nullcontext as does_not_raise
 from functools import partial
@@ -528,3 +529,244 @@ def test_find_any_indexed(create_db_fast):
     assert "value1" in keys
     assert "value3" in keys
     assert "value5" not in keys
+
+
+def test_dynamic_index_creation(create_db_fast):
+    """Test dynamically creating an index after database initialization."""
+    documents = [
+        {"name": "Alice", "email": "alice@example.com"},
+        {"name": "Bob", "email": "bob@example.com"},
+        {"name": "Charlie", "email": "charlie@example.com"},
+    ]
+    # Start with no indexed fields
+    db = create_db_fast(indexed_fields=[])
+    db.insert_many(documents)
+
+    # Verify email is not indexed initially
+    indexed = db.get_indexed_fields()
+    assert "email" not in indexed
+
+    # Add index dynamically
+    db.create_index("email")
+
+    # Verify email is now indexed
+    indexed = db.get_indexed_fields()
+    assert "email" in indexed
+
+    # Search should work with the new index
+    results = db.search("email", "bob@example.com")
+    assert len(results) == 1
+    assert results[0]["name"] == "Bob"
+
+    # Verify it uses the index
+    plan = db.explain("search", "email", "bob@example.com")
+    plan_str = str(plan[0])
+    assert "INDEX" in plan_str or "SEARCH" in plan_str
+
+
+def test_search_pattern_basic(create_db_fast):
+    """Test pattern search with REGEXP."""
+    documents = [
+        {"name": "Alice Smith"},
+        {"name": "Alice Johnson"},
+        {"name": "Bob Smith"},
+        {"name": "Charlie Brown"},
+    ]
+    db = create_db_fast(indexed_fields=["name"])
+    db.insert_many(documents)
+
+    # Search for names starting with "Alice" using regex
+    results = db.search_pattern("name", "^Alice")
+    assert len(results) == 2
+    names = [doc["name"] for doc in results]
+    assert "Alice Smith" in names
+    assert "Alice Johnson" in names
+
+
+def test_search_pattern_regex(create_db_fast):
+    """Test pattern search with regex for emails."""
+    documents = [
+        {"email": "alice@example.com"},
+        {"email": "bob@example.com"},
+        {"email": "alice@test.org"},
+        {"email": "charlie@example.net"},
+    ]
+    db = create_db_fast(indexed_fields=["email"])
+    db.insert_many(documents)
+
+    # Search for emails with "example.com"
+    results = db.search_pattern("email", r".*@example\.com$")
+    assert len(results) == 2
+    emails = [doc["email"] for doc in results]
+    assert "alice@example.com" in emails
+    assert "bob@example.com" in emails
+
+
+def test_search_pattern_invalid_field(create_db_fast):
+    """Test pattern search with invalid field raises ValueError."""
+    db = create_db_fast()
+    db.insert({"name": "Alice"})
+
+    with pytest.raises(ValueError, match="key must be a non-empty string"):
+        db.search_pattern(None, "pattern")
+
+    with pytest.raises(ValueError, match="key must be a non-empty string"):
+        db.search_pattern(123, "pattern")
+
+
+def test_search_pattern_invalid_pattern(create_db_fast):
+    """Test pattern search with invalid pattern raises ValueError."""
+    db = create_db_fast()
+    db.insert({"name": "Alice"})
+
+    with pytest.raises(ValueError, match="pattern must be a non-empty string"):
+        db.search_pattern("name", None)
+
+    with pytest.raises(ValueError, match="pattern must be a non-empty string"):
+        db.search_pattern("name", 123)
+
+
+def test_find_any_empty_list(create_db_fast):
+    """Test find_any with empty list returns empty results."""
+    db = create_db_fast()
+    db.insert({"name": "Alice"})
+
+    # Empty list returns empty results
+    results = db.find_any("name", [])
+    assert len(results) == 0
+
+
+def test_execute_async_basic(create_db_fast):
+    """Test asynchronous query execution."""
+    documents = [{"key": f"value{i}"} for i in range(100)]
+    db = create_db_fast()
+    db.insert_many(documents)
+
+    # Execute async search - pass the method itself
+    future = db.execute_async(db.search, "key", "value50")
+    results = future.result(timeout=5)
+
+    assert len(results) == 1
+    assert results[0]["key"] == "value50"
+
+
+def test_execute_async_all(create_db_fast):
+    """Test asynchronous all() execution."""
+    documents = [{"key": f"value{i}"} for i in range(50)]
+    db = create_db_fast()
+    db.insert_many(documents)
+
+    # Execute async all - pass the method with kwargs
+    future = db.execute_async(db.all, limit=20)
+    results = future.result(timeout=5)
+
+    assert len(results) == 20
+
+
+def test_create_index_invalid_field(create_db_fast):
+    """Test creating index with invalid field name causes TypeError."""
+    db = create_db_fast(indexed_fields=[])
+
+    # None will cause TypeError in _sanitize_field_name
+    with pytest.raises(TypeError):
+        db.create_index(None)
+
+
+def test_search_optimized_no_filters(create_db_fast):
+    """Test search_optimized with no filters returns all documents."""
+    documents = [{"name": "Alice"}, {"name": "Bob"}]
+    db = create_db_fast()
+    db.insert_many(documents)
+
+    # No filters returns all documents (calls all())
+    results = db.search_optimized()
+    assert len(results) == 2
+
+
+def test_search_by_id_field(create_db_fast):
+    """Test searching by 'id' field uses json_extract."""
+    documents = [
+        {"id": 1, "name": "Alice"},
+        {"id": 2, "name": "Bob"},
+        {"id": 3, "name": "Charlie"},
+    ]
+    db = create_db_fast(indexed_fields=["name"])
+    db.insert_many(documents)
+
+    # Search by id field (special case in search method)
+    results = db.search("id", 2)
+    assert len(results) == 1
+    assert results[0]["name"] == "Bob"
+    assert results[0]["id"] == 2
+
+
+def test_find_all_method(create_db_fast):
+    """Test find_all method that finds documents containing all values."""
+    documents = [
+        {"tags": ["python", "database", "sqlite"]},
+        {"tags": ["python", "web"]},
+        {"tags": ["database", "nosql"]},
+        {"tags": ["python", "database"]},
+    ]
+    db = create_db_fast()
+    db.insert_many(documents)
+
+    # Find documents with both python AND database tags
+    results = db.find_all("tags", ["python", "database"])
+    assert len(results) == 2  # First and last documents
+
+
+def test_find_all_empty_list(create_db_fast):
+    """Test find_all with empty list returns empty results."""
+    db = create_db_fast()
+    db.insert({"tags": ["python"]})
+
+    results = db.find_all("tags", [])
+    assert len(results) == 0
+
+
+def test_database_close(create_db_fast):
+    """Test closing database connection."""
+    db = create_db_fast()
+    db.insert({"name": "Alice"})
+
+    # Close database
+    db.close()
+
+    # After close, connection should be closed
+    # Attempting to use it would raise an error
+    with pytest.raises(sqlite3.ProgrammingError):
+        db.insert({"name": "Bob"})
+
+
+def test_all_cursor_empty_database(create_db_fast):
+    """Test cursor pagination on empty database."""
+    db = create_db_fast()
+
+    result = db.all_cursor(limit=10)
+    assert len(result["documents"]) == 0
+    assert result["has_more"] is False
+    assert result["next_cursor"] is None
+
+
+def test_create_index_already_exists(create_db_fast):
+    """Test creating index that already exists returns False."""
+    db = create_db_fast(indexed_fields=["name"])
+
+    # Try to create index for field that's already indexed
+    result = db.create_index("name")
+    assert result is False  # Already exists
+
+
+def test_search_pattern_no_matches(create_db_fast):
+    """Test pattern search with no matching results."""
+    documents = [
+        {"email": "alice@example.com"},
+        {"email": "bob@example.com"},
+    ]
+    db = create_db_fast(indexed_fields=["email"])
+    db.insert_many(documents)
+
+    # Search for pattern that won't match
+    results = db.search_pattern("email", r".*@test\.org$")
+    assert len(results) == 0

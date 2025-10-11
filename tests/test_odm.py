@@ -428,3 +428,140 @@ def test_update_indexed_field(db):
     new = User.get(email="carol.new@example.com")
     assert new is not None
     assert new._id == original_id
+
+
+def test_from_dict_error_handling(db):
+    """Test error handling when deserializing invalid data."""
+    # Invalid data that can't be structured into User
+    invalid_data = {
+        "name": "Alice",
+        "email": "alice@example.com",
+        "age": "not_an_integer",  # Should be int
+    }
+
+    with pytest.raises(ValueError, match="Failed to deserialize document"):
+        User._from_dict(invalid_data, doc_id=1)
+
+
+def test_document_without_dataclass_fields(db):
+    """Test Document behavior with minimal dataclass."""
+
+    @dataclass
+    class MinimalDoc(Document):
+        """Minimal document with just one field."""
+
+        value: str
+
+    minimal = MinimalDoc(value="test")
+    minimal.save()
+
+    assert minimal._id is not None
+
+    retrieved = MinimalDoc.get_by_id(minimal._id)
+    assert retrieved is not None
+    assert retrieved.value == "test"
+
+
+def test_insert_many_empty_list(db):
+    """Test insert_many with empty list."""
+    result = User.insert_many([])
+    assert result == []
+
+
+def test_delete_many_no_filters(db):
+    """Test delete_many without filters raises error."""
+    user = User(name="Alice", email="alice@example.com", age=30)
+    user.save()
+
+    with pytest.raises(ValueError, match="delete_many requires at least one filter"):
+        User.delete_many()
+
+
+def test_save_without_database_set():
+    """Test save when database not set raises error."""
+
+    @dataclass
+    class TempDoc(Document):
+        name: str
+
+    # Save original db
+    original_db = Document._db
+    Document._db = None
+
+    try:
+        doc = TempDoc(name="test")
+        with pytest.raises(RuntimeError, match="Database not initialized"):
+            doc.save()
+    finally:
+        # Restore database
+        Document._db = original_db
+
+
+def test_filter_with_no_results(db):
+    """Test filter that returns no results."""
+    user = User(name="Alice", email="alice@example.com", age=30)
+    user.save()
+
+    # Filter that won't match
+    results = User.filter(age=999)
+    assert len(results) == 0
+
+
+def test_count_with_no_matches(db):
+    """Test count with no matching documents."""
+    user = User(name="Alice", email="alice@example.com", age=30)
+    user.save()
+
+    # Count that won't match
+    count = User.count(age=999)
+    assert count == 0
+
+
+def test_get_by_id_nonexistent(db):
+    """Test get_by_id with nonexistent ID."""
+    result = User.get_by_id(99999)
+    assert result is None
+
+
+def test_document_repr_with_complex_data(db):
+    """Test __repr__ with complex nested data."""
+    post = Post(
+        title="Test Post",
+        content="Some content",
+        author_id=1,
+        tags=["tag1", "tag2", "tag3"],
+        published=True,
+    )
+    post.save()
+
+    repr_str = repr(post)
+    assert "Post" in repr_str
+    assert "title='Test Post'" in repr_str
+    assert "_id" in str(post._id) or "Post(" in repr_str
+
+
+def test_all_with_empty_database(db):
+    """Test all() on empty database."""
+    results = User.all()
+    assert len(results) == 0
+
+
+def test_delete_many_with_indexed_field(db):
+    """Test delete_many using indexed field."""
+    users = [
+        User(name="Alice", email="alice@example.com", age=30),
+        User(name="Bob", email="bob@example.com", age=30),
+        User(name="Charlie", email="charlie@example.com", age=25),
+    ]
+
+    for user in users:
+        user.save()
+
+    # Delete by indexed field (age)
+    deleted = User.delete_many(age=30)
+    assert deleted == 2
+
+    # Verify only age=25 remains
+    remaining = User.all()
+    assert len(remaining) == 1
+    assert remaining[0].age == 25
