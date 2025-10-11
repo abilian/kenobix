@@ -37,10 +37,9 @@ Example:
 
 import json
 from dataclasses import fields, is_dataclass
-from typing import Any, ClassVar, Dict, List, Optional, Type, TypeVar
+from typing import Any, ClassVar, Self, TypeVar
 
 import cattrs
-from typing_extensions import Self
 
 from .kenobix import KenobiX
 
@@ -68,15 +67,15 @@ class Document:
     """
 
     # Class-level database connection
-    _db: ClassVar[Optional[KenobiX]] = None
+    _db: ClassVar[KenobiX | None] = None
     _converter: ClassVar[Any] = None
 
     # Configuration via inner Meta class
     class Meta:
         """Override in subclasses to configure ODM behavior."""
 
-        indexed_fields: List[str] = []
-        table_name: Optional[str] = None  # Future: support multiple tables
+        indexed_fields: list[str] = []
+        table_name: str | None = None  # Future: support multiple tables
 
     def __init__(self, **kwargs):
         """
@@ -114,12 +113,11 @@ class Document:
     def _get_db(cls) -> KenobiX:
         """Get database instance, raising error if not set."""
         if cls._db is None:
-            raise RuntimeError(
-                "Database not initialized. Call Document.set_database(db) first."
-            )
+            msg = "Database not initialized. Call Document.set_database(db) first."
+            raise RuntimeError(msg)
         return cls._db
 
-    def _to_dict(self) -> Dict[str, Any]:
+    def _to_dict(self) -> dict[str, Any]:
         """
         Convert dataclass instance to dict for storage.
 
@@ -136,9 +134,7 @@ class Document:
         return data
 
     @classmethod
-    def _from_dict(
-        cls: Type[T], data: Dict[str, Any], doc_id: Optional[int] = None
-    ) -> T:
+    def _from_dict(cls, data: dict[str, Any], doc_id: int | None = None) -> Self:
         """
         Create instance from dictionary.
 
@@ -159,7 +155,8 @@ class Document:
             instance._id = doc_id
             return instance
         except Exception as e:
-            raise ValueError(f"Failed to deserialize document: {e}") from e
+            msg = f"Failed to deserialize document: {e}"
+            raise ValueError(msg) from e
 
     def save(self) -> Self:
         """
@@ -189,7 +186,7 @@ class Document:
         return self
 
     @classmethod
-    def get(cls: Type[T], **filters) -> Optional[T]:
+    def get(cls, **filters) -> Self | None:
         """
         Get a single document matching the filters.
 
@@ -206,7 +203,7 @@ class Document:
         return results[0] if results else None
 
     @classmethod
-    def get_by_id(cls: Type[T], doc_id: int) -> Optional[T]:
+    def get_by_id(cls, doc_id: int) -> Self | None:
         """
         Get document by primary key ID.
 
@@ -230,7 +227,7 @@ class Document:
         return None
 
     @classmethod
-    def filter(cls: Type[T], limit: int = 100, offset: int = 0, **filters) -> List[T]:
+    def filter(cls, limit: int = 100, offset: int = 0, **filters) -> list[Self]:
         """
         Get all documents matching the filters.
 
@@ -285,7 +282,7 @@ class Document:
         return instances
 
     @classmethod
-    def all(cls: Type[T], limit: int = 100, offset: int = 0) -> List[T]:
+    def all(cls, limit: int = 100, offset: int = 0) -> list[Self]:
         """
         Get all documents.
 
@@ -309,7 +306,8 @@ class Document:
             RuntimeError: If document has no _id (not saved yet)
         """
         if self._id is None:
-            raise RuntimeError("Cannot delete unsaved document")
+            msg = "Cannot delete unsaved document"
+            raise RuntimeError(msg)
 
         db = self._get_db()
 
@@ -338,7 +336,8 @@ class Document:
         db = cls._get_db()
 
         if not filters:
-            raise ValueError("delete_many requires at least one filter")
+            msg = "delete_many requires at least one filter"
+            raise ValueError(msg)
 
         # Build WHERE clause
         where_parts = []
@@ -363,7 +362,7 @@ class Document:
         return cursor.rowcount
 
     @classmethod
-    def insert_many(cls: Type[T], instances: List[T]) -> List[T]:
+    def insert_many(cls, instances: list[Self]) -> list[Self]:
         """
         Insert multiple documents in a single transaction.
 
@@ -392,7 +391,7 @@ class Document:
         ids = db.insert_many(documents)
 
         # Update instances with IDs
-        for inst, doc_id in zip(instances, ids):
+        for inst, doc_id in zip(instances, ids, strict=False):
             inst._id = doc_id
 
         return instances

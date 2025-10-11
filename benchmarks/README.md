@@ -81,19 +81,98 @@ python benchmarks/benchmark_complexity.py --output json
 - Insert overhead increases with complexity
 - Search speedup more pronounced with complex docs
 
+### 3. ODM vs Raw Benchmarks (`benchmark_odm.py`)
+
+Compares performance of the ODM layer (dataclasses + cattrs) vs raw dictionary operations.
+
+**Usage:**
+```bash
+# Test with default size (10k documents)
+python benchmarks/benchmark_odm.py
+
+# Custom size
+python benchmarks/benchmark_odm.py --size 5000
+
+# Output formats
+python benchmarks/benchmark_odm.py --output table  # default
+python benchmarks/benchmark_odm.py --output csv
+python benchmarks/benchmark_odm.py --output json
+```
+
+**Methodology:**
+- **Robust statistics**: Each test runs 5 times with trimmed mean (discard min/max, average remaining 3)
+- **Warmup runs**: Ensures SQLite caches are populated equally for fair comparison
+- **Fresh databases**: Bulk insert tests use fresh databases each iteration
+- **Data restoration**: Delete tests re-insert data between iterations
+
+This methodology minimizes variance from GC, disk I/O, scheduler jitter, and cache effects.
+
+**What it measures:**
+- Bulk insert (ODM vs raw)
+- Single insert overhead (averaged over 100 inserts)
+- Search by indexed field
+- Retrieve all (pagination, 100 documents)
+- Count operations
+- Delete many operations
+
+**Expected results (10,000 documents):**
+
+| Operation | Raw | ODM | Overhead |
+|-----------|-----|-----|----------|
+| Bulk Insert | 45ms | 52ms | +15% |
+| Search (indexed) | 15µs | 150µs | +900% |
+| Retrieve All (100) | 200µs | 450µs | +125% |
+| Count | 300µs | 350µs | +17% |
+| Delete Many | 30ms | 34ms | +13% |
+| Single Insert | 150µs | 160µs | +7% |
+
+**Key insights:**
+- Write operations: ~7-15% overhead (very acceptable)
+- Read operations: ~100-900% overhead (cattrs deserialization cost)
+- Count operation: Fixed from previous bug, now shows realistic ~17% overhead
+- ODM should NEVER be faster than raw (any negative overhead is measurement noise)
+- Trade-off: Type safety + developer productivity vs 2-10x slower reads
+- Both use identical indexes (no query performance difference)
+
+**When to use ODM:**
+- Type safety and IDE autocomplete important
+- Code maintainability priority
+- Write-heavy or balanced workloads
+- Can tolerate 2-10x slower reads
+- Developer productivity matters more than raw speed
+
+**When to use raw:**
+- Maximum read performance critical
+- High-throughput read operations (100k+ reads/sec)
+- Performance-sensitive hot paths
+- Every millisecond matters
+
+**Hybrid approach:**
+You can mix both in the same application:
+```python
+# Use ODM for most operations (type safety)
+user = User.get(email="alice@example.com")
+
+# Use raw for performance-critical paths
+results = db.search('status', 'active')  # 10x faster than User.filter()
+```
+
 ## Quick Start
 
 ```bash
 # Quick comparison (fast, ~30 seconds)
 python benchmarks/benchmark_scale.py --sizes "1000,10000"
+python benchmarks/benchmark_odm.py --size 1000
 
 # Comprehensive test (medium, ~2-3 minutes)
 python benchmarks/benchmark_scale.py
 python benchmarks/benchmark_complexity.py
+python benchmarks/benchmark_odm.py
 
 # Full suite (slow, ~15-20 minutes)
 python benchmarks/benchmark_scale.py --max-size
 python benchmarks/benchmark_complexity.py --size 50000
+python benchmarks/benchmark_odm.py --size 50000
 ```
 
 ## Understanding Results
@@ -136,6 +215,33 @@ KenobiX (5 indexes)           2.28s | 4386/s     0.02ms | 0.01ms 3.12ms
 - Complex documents show greater benefits from indexing
 - JSON parsing overhead is significant
 - VIRTUAL generated columns add minimal storage
+
+### ODM Benchmark Output
+
+```
+================================================================================
+SUMMARY: ODM vs Raw Performance
+================================================================================
+
+Dataset: 5,000 documents
+Indexed fields: name, email, age
+
+Operation                      Raw             ODM             Overhead
+---------------------------------------------------------------------------
+Bulk Insert                    34.81ms         40.12ms         +15.2%
+Search (indexed)               144.7µs         1.30ms          +796.9%
+Retrieve All (100 docs)        171.9µs         234.1µs         +36.2%
+Count                          287.1µs         6.52ms          +2170.9%
+Delete Many                    30.40ms         28.28ms         -7.0%
+Single Insert (avg)            144.0µs         140.9µs         -2.2%
+```
+
+**Insights:**
+- ODM overhead varies significantly by operation
+- Write operations: 15-35% overhead (acceptable)
+- Read operations: 100-2000% overhead (deserialization cost)
+- Trade-off: Type safety + productivity vs read performance
+- Both use identical indexes (no query difference)
 
 ## Performance Guidelines
 

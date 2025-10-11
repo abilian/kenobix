@@ -19,15 +19,15 @@ Options:
 import argparse
 import json
 import os
+import pathlib
 import random
 import string
 import sys
 import tempfile
 import time
-from typing import Dict, List
 
 # Add src to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+sys.path.insert(0, os.path.join(pathlib.Path(__file__).parent, "..", "src"))
 
 import pathlib
 
@@ -39,12 +39,12 @@ def random_string(length: int = 10) -> str:
     return "".join(random.choices(string.ascii_letters, k=length))
 
 
-def generate_simple_document(i: int) -> Dict:
+def generate_simple_document(i: int) -> dict:
     """Generate simple document: 3 fields, ~50 bytes."""
     return {"id": i, "name": f"user_{i}", "value": i * 10}
 
 
-def generate_medium_document(i: int) -> Dict:
+def generate_medium_document(i: int) -> dict:
     """Generate medium document: 6 fields, ~100 bytes."""
     return {
         "id": i,
@@ -56,7 +56,7 @@ def generate_medium_document(i: int) -> Dict:
     }
 
 
-def generate_complex_document(i: int) -> Dict:
+def generate_complex_document(i: int) -> dict:
     """Generate complex document: 10+ fields with nesting, ~300 bytes."""
     return {
         "id": i,
@@ -82,7 +82,7 @@ def generate_complex_document(i: int) -> Dict:
     }
 
 
-def generate_very_complex_document(i: int) -> Dict:
+def generate_very_complex_document(i: int) -> dict:
     """Generate very complex document: many nested structures, ~1KB."""
     return {
         "id": i,
@@ -168,10 +168,10 @@ COMPLEXITY_LEVELS = {
 
 
 def benchmark_operations(
-    db, documents: List[Dict], db_name: str, complexity: str
-) -> Dict:
+    db, documents: list[dict], db_name: str, complexity: str
+) -> dict:
     """Run benchmark operations on database."""
-    generator, size_desc, indexed_fields = COMPLEXITY_LEVELS[complexity]
+    _generator, size_desc, _indexed_fields = COMPLEXITY_LEVELS[complexity]
 
     results = {
         "database": db_name,
@@ -195,7 +195,7 @@ def benchmark_operations(
     for _ in range(10):
         search_id = random.randint(0, len(documents) - 1)
         start = time.time()
-        result = db.search("id", search_id)
+        db.search("id", search_id)
         search_times.append(time.time() - start)
     results["search_indexed_avg"] = sum(search_times) / len(search_times)
     results["search_indexed_min"] = min(search_times)
@@ -206,7 +206,7 @@ def benchmark_operations(
         search_times = []
         for _ in range(10):
             start = time.time()
-            result = db.search("city", "city_50")
+            db.search("city", "city_50")
             search_times.append(time.time() - start)
         results["search_unindexed_avg"] = sum(search_times) / len(search_times)
     else:
@@ -239,7 +239,7 @@ def benchmark_operations(
     return results
 
 
-def run_complexity_benchmark(complexity: str, count: int) -> List[Dict]:
+def run_complexity_benchmark(complexity: str, count: int) -> list[dict]:
     """Run benchmark for a specific complexity level."""
     generator, size_desc, indexed_fields = COMPLEXITY_LEVELS[complexity]
 
@@ -311,7 +311,7 @@ def format_size(bytes: int) -> str:
     return f"{bytes:.1f}GB"
 
 
-def print_comparison_table(all_results: List[Dict]):
+def print_comparison_table(all_results: list[dict]):
     """Print results in comparison table."""
     print("\n" + "=" * 120)
     print("COMPLEXITY BENCHMARK RESULTS")

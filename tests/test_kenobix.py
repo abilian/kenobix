@@ -113,7 +113,7 @@ def create_db_fast(db_path_fast, request):
 
 
 @pytest.mark.parametrize(
-    "meth, document, expectation, result_count_expected, document_expected",
+    ("meth", "document", "expectation", "result_count_expected", "document_expected"),
     testdata_insert_single_document,
     ids=ids_insert_single_document,
 )
@@ -182,7 +182,7 @@ ids_remove_document = (
 
 
 @pytest.mark.parametrize(
-    "document, query_key, query_val, expectation, results_count_expected",
+    ("document", "query_key", "query_val", "expectation", "results_count_expected"),
     testdata_remove_document,
     ids=ids_remove_document,
 )
@@ -255,8 +255,15 @@ ids_update_document = (
 
 @pytest.mark.parametrize(
     (
-        "document, updated_fields, id_field, id_val, val_key, "
-        "val_expected, expectation, results_count_expected, is_success_expected"
+        "document",
+        "updated_fields",
+        "id_field",
+        "id_val",
+        "val_key",
+        "val_expected",
+        "expectation",
+        "results_count_expected",
+        "is_success_expected",
     ),
     testdata_update_document,
     ids=ids_update_document,
@@ -330,7 +337,7 @@ ids_search_by_key_value = (
 
 
 @pytest.mark.parametrize(
-    "documents, query_key, query_val, expectation, results_count_expected",
+    ("documents", "query_key", "query_val", "expectation", "results_count_expected"),
     testdata_search_by_key_value,
     ids=ids_search_by_key_value,
 )

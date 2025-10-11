@@ -10,7 +10,6 @@ Tests cover:
 """
 
 from dataclasses import dataclass
-from typing import List
 
 import pytest
 
@@ -53,7 +52,7 @@ class Post(Document):
     title: str
     content: str
     author_id: int
-    tags: List[str]
+    tags: list[str]
     published: bool = False
 
 

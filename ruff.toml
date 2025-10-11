@@ -27,19 +27,21 @@ lint.extend-ignore = [
     "FURB152", # 3.14 != Pi. This one is insane.
     "RUF005", # Confusing syntax
     "S101", # use of assert
+    # FIX or review This
+    "S608", # Potential SQL injection
     # Review later
-    "ASYNC109", # timeouts in asyncio
-    #  Fix
-    "CPY001", #  	[ ] missing-copyright-notice
-    "SLF001", #  	[ ] private-member-access
-    "PT011", #   	[ ] pytest-raises-too-broad
-    "BLE001", #  	[ ] blind-except
-    "INP001", #  	[ ] implicit-namespace-package
-    "PLC1901",
-    "RUF006", # asyncio-dangling-task
-    "RUF001", # ambiguous-unicode-character-string
-    "RUF034", # useless-if-else
-    "RUF022", # unsorted-dunder-all
-    "RUF029", # unused-async
-    "RUF036", # none-not-at-end-of-union
+    "SLF001", #	[ ] private-member-access
+    "CPY001", #	[ ] missing-copyright-notice
+    "PT011", # 	[ ] pytest-raises-too-broad
+    "RUF001", #	[ ] ambiguous-unicode-character-string
+    "C901", #   	complex-structure
+    "PLC0415", #	import-outside-top-level
+    "PTH118", # 	os-path-join
+    "S311", #   	suspicious-non-cryptographic-random-usage
+    "EXE001", # 	shebang-not-executable
+    "F401", #   	unused-import
+    "PT021", #  	pytest-fixture-finalizer-callback
+    "RUF012", # 	mutable-class-default
+    "SIM102", # 	collapsible-if
+    "SIM108", # 	if-else-block-instead-of-if-exp
 ]

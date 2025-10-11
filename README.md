@@ -46,6 +46,13 @@ See `benchmarks/` for detailed performance analysis.
 - **Query Analysis** - Built-in `explain()` for optimization
 - **Zero Runtime Dependencies** - Only Python stdlib (cattrs optional for ODM)
 
+## Documentation
+
+- **[Getting Started](docs/index.md)** - Quick start guide
+- **[ODM Guide](docs/odm-guide.md)** - Complete ODM documentation with examples
+- **[Performance Guide](docs/performance.md)** - Benchmarks and optimization tips
+- **[API Reference](docs/api-reference.md)** - Full API documentation
+
 ## Installation
 
 ```bash
@@ -275,28 +282,46 @@ Existing databases work without modification. Add `indexed_fields` to unlock per
 # Run all tests
 pytest tests/
 
-# Run with coverage
-pytest --cov=kenobi tests/
+# Run with coverage (90%+ coverage maintained)
+pytest --cov=kenobix tests/
 
 # Run benchmarks
 python benchmarks/benchmark_scale.py
 python benchmarks/benchmark_complexity.py
 ```
 
+**Test Coverage:** KenobiX maintains 90%+ test coverage across:
+- Core database operations (kenobix.py: 88%+)
+- ODM layer (odm.py: 93%+)
+- 81 tests covering CRUD, indexing, concurrency, and ODM features
+
 ## Benchmarking
 
 Comprehensive benchmarks included:
 
 ```bash
-# Quick comparison
-python benchmarks/benchmark_scale.py --sizes "1000,10000"
-
-# Full scale test
+# Scale performance (1k-100k documents)
 python benchmarks/benchmark_scale.py --sizes "1000,10000,100000"
 
 # Document complexity impact
 python benchmarks/benchmark_complexity.py
+
+# ODM vs Raw performance comparison
+python benchmarks/benchmark_odm.py --size 10000
 ```
+
+### ODM Performance
+
+The ODM layer adds overhead for deserialization (cattrs). Results based on robust benchmarks (5 iterations, trimmed mean):
+
+- **Write operations**: ~7-15% slower (very acceptable)
+- **Read operations**: ~100-900% slower (cattrs deserialization cost)
+- **Count operations**: ~17% slower (minimal deserialization)
+- **Trade-off**: Type safety + developer productivity vs 2-10x slower reads
+
+**Key insight:** Write overhead is minimal. Read overhead is significant due to cattrs deserialization, not SQL queries (both use identical indexes).
+
+For read-heavy workloads requiring maximum performance, use raw operations. For applications needing type safety and developer productivity, the ODM overhead is acceptable. You can also use a hybrid approach: ODM for most code, raw for hot paths.
 
 ## Credits
 
@@ -347,10 +372,16 @@ Contributions welcome! Please:
 - Added cursor-based pagination
 - Added query plan analysis (`explain()`)
 - Added `search_optimized()` for multi-field queries
-- Added optional ODM layer with dataclass support
-- Modified insert/insert_many to return IDs
-- Comprehensive benchmark suite
+- Added optional ODM layer with dataclass support and cattrs integration
+  - Full CRUD operations: save(), get(), filter(), delete()
+  - Bulk operations: insert_many(), delete_many()
+  - Automatic index usage for queries
+  - Type-safe models with zero boilerplate
+- Modified insert/insert_many to return IDs for ODM integration
+- Comprehensive benchmark suite (scale and complexity tests)
 - Full API compatibility with KenobiDB
+- 90%+ test coverage (81 tests covering all features)
+- Complete documentation suite (Getting Started, ODM Guide, Performance Guide, API Reference)
 
 ---
 

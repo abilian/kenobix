@@ -17,20 +17,20 @@ Options:
 import argparse
 import json
 import os
+import pathlib
 import sys
 import tempfile
 import time
-from typing import Dict, List, Tuple
 
 # Add src to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+sys.path.insert(0, os.path.join(pathlib.Path(__file__).parent, "..", "src"))
 
 import pathlib
 
 from kenobix import KenobiX
 
 
-def generate_documents(count: int, pattern: str = "simple") -> List[Dict]:
+def generate_documents(count: int, pattern: str = "simple") -> list[dict]:
     """Generate test documents.
 
     Args:
@@ -73,14 +73,14 @@ def generate_documents(count: int, pattern: str = "simple") -> List[Dict]:
     ]
 
 
-def benchmark_insert(db, documents: List[Dict]) -> float:
+def benchmark_insert(db, documents: list[dict]) -> float:
     """Benchmark bulk insert operation."""
     start = time.time()
     db.insert_many(documents)
     return time.time() - start
 
 
-def benchmark_search_indexed(db, field: str, value) -> Tuple[float, int]:
+def benchmark_search_indexed(db, field: str, value) -> tuple[float, int]:
     """Benchmark search on indexed field."""
     start = time.time()
     results = db.search(field, value)
@@ -88,7 +88,7 @@ def benchmark_search_indexed(db, field: str, value) -> Tuple[float, int]:
     return elapsed, len(results)
 
 
-def benchmark_search_unindexed(db, field: str, value) -> Tuple[float, int]:
+def benchmark_search_unindexed(db, field: str, value) -> tuple[float, int]:
     """Benchmark search on non-indexed field."""
     start = time.time()
     results = db.search(field, value)
@@ -96,7 +96,7 @@ def benchmark_search_unindexed(db, field: str, value) -> Tuple[float, int]:
     return elapsed, len(results)
 
 
-def benchmark_search_range(db, count: int) -> Tuple[float, int]:
+def benchmark_search_range(db, count: int) -> tuple[float, int]:
     """Benchmark range-like searches (multiple searches)."""
     start = time.time()
     all_results = []
@@ -130,9 +130,9 @@ def run_benchmark_suite(
     db_name: str,
     db_factory,
     size: int,
-    documents: List[Dict],
-    indexed_fields: List[str] = None,
-) -> Dict:
+    documents: list[dict],
+    indexed_fields: list[str] | None = None,
+) -> dict:
     """Run full benchmark suite on a database instance."""
     results = {
         "name": db_name,
@@ -219,13 +219,13 @@ def format_size(bytes: int) -> str:
     return f"{bytes:.1f}TB"
 
 
-def print_results_table(all_results: List[Dict]):
+def print_results_table(all_results: list[dict]):
     """Print results in a formatted table."""
     print("\n" + "=" * 100)
     print("BENCHMARK RESULTS")
     print("=" * 100)
 
-    sizes = sorted(set(r["size"] for r in all_results))
+    sizes = sorted({r["size"] for r in all_results})
 
     for size in sizes:
         size_results = [r for r in all_results if r["size"] == size]

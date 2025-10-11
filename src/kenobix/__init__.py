@@ -17,7 +17,7 @@ from .kenobix import KenobiX
 try:
     from .odm import Document
 
-    __all__ = ("KenobiX", "Document")
+    __all__ = ("Document", "KenobiX")
 except ImportError:
     # cattrs not installed, ODM not available
     __all__ = ("KenobiX",)

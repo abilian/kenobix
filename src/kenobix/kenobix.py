@@ -23,7 +23,7 @@ import json
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from threading import RLock
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 
 class KenobiX:
@@ -48,7 +48,7 @@ class KenobiX:
         db.search('tags', 'python')  # No index - falls back to json_extract
     """
 
-    def __init__(self, file: str, indexed_fields: Optional[List[str]] = None):
+    def __init__(self, file: str, indexed_fields: list[str] | None = None):
         """
         Initialize the database with optional field indexing.
 
@@ -60,7 +60,7 @@ class KenobiX:
         self.file = file
         self._write_lock = RLock()  # Only for writes
         self._connection = sqlite3.connect(self.file, check_same_thread=False)
-        self._indexed_fields: Set[str] = set(indexed_fields or [])
+        self._indexed_fields: set[str] = set(indexed_fields or [])
         self.executor = ThreadPoolExecutor(max_workers=5)
 
         self._add_regexp_support(self._connection)
@@ -160,7 +160,7 @@ class KenobiX:
                 # Column already exists or can't be added
                 return False
 
-    def insert(self, document: Dict[str, Any]) -> int:
+    def insert(self, document: dict[str, Any]) -> int:
         """
         Insert a document. Uses write lock.
 
@@ -174,7 +174,8 @@ class KenobiX:
             TypeError: If document is not a dict
         """
         if not isinstance(document, dict):
-            raise TypeError("Must insert a dict")
+            msg = "Must insert a dict"
+            raise TypeError(msg)
 
         with self._write_lock:
             cursor = self._connection.execute(
@@ -183,7 +184,7 @@ class KenobiX:
             self._connection.commit()
             return cursor.lastrowid
 
-    def insert_many(self, document_list: List[Dict[str, Any]]) -> List[int]:
+    def insert_many(self, document_list: list[dict[str, Any]]) -> list[int]:
         """
         Insert multiple documents (list of dicts) into the database.
 
@@ -199,7 +200,8 @@ class KenobiX:
         if not isinstance(document_list, list) or not all(
             isinstance(doc, dict) for doc in document_list
         ):
-            raise TypeError("Must insert a list of dicts")
+            msg = "Must insert a list of dicts"
+            raise TypeError(msg)
 
         with self._write_lock:
             cursor = self._connection.execute("SELECT MAX(id) FROM documents")
@@ -229,9 +231,11 @@ class KenobiX:
             ValueError: If 'key' is empty or 'value' is None.
         """
         if not key or not isinstance(key, str):
-            raise ValueError("key must be a non-empty string")
+            msg = "key must be a non-empty string"
+            raise ValueError(msg)
         if value is None:
-            raise ValueError("value cannot be None")
+            msg = "value cannot be None"
+            raise ValueError(msg)
 
         with self._write_lock:
             if key in self._indexed_fields:
@@ -244,7 +248,7 @@ class KenobiX:
             self._connection.commit()
             return result.rowcount
 
-    def update(self, id_key: str, id_value: Any, new_dict: Dict[str, Any]) -> bool:
+    def update(self, id_key: str, id_value: Any, new_dict: dict[str, Any]) -> bool:
         """
         Update documents that match (id_key == id_value) by merging new_dict.
 
@@ -261,11 +265,14 @@ class KenobiX:
             ValueError: If id_key is invalid or id_value is None.
         """
         if not isinstance(new_dict, dict):
-            raise TypeError("new_dict must be a dictionary")
+            msg = "new_dict must be a dictionary"
+            raise TypeError(msg)
         if not id_key or not isinstance(id_key, str):
-            raise ValueError("id_key must be a non-empty string")
+            msg = "id_key must be a non-empty string"
+            raise ValueError(msg)
         if id_value is None:
-            raise ValueError("id_value cannot be None")
+            msg = "id_value cannot be None"
+            raise ValueError(msg)
 
         with self._write_lock:
             if id_key in self._indexed_fields:
@@ -316,7 +323,7 @@ class KenobiX:
 
     def search(
         self, key: str, value: Any, limit: int = 100, offset: int = 0
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """
         Search documents. No lock needed for reads!
         Automatically uses index if available.
@@ -331,7 +338,8 @@ class KenobiX:
             List of matching documents
         """
         if not key or not isinstance(key, str):
-            raise ValueError("Key must be a non-empty string")
+            msg = "Key must be a non-empty string"
+            raise ValueError(msg)
 
         # Special case: searching by 'id' uses the primary key column directly
         # since we can't create a generated column for it
@@ -361,7 +369,7 @@ class KenobiX:
 
         return [json.loads(row[0]) for row in cursor.fetchall()]
 
-    def search_optimized(self, **filters) -> List[Dict]:
+    def search_optimized(self, **filters) -> list[dict]:
         """
         Multi-field search with automatic index usage.
 
@@ -396,13 +404,13 @@ class KenobiX:
         cursor = self._connection.execute(query, params)
         return [json.loads(row[0]) for row in cursor.fetchall()]
 
-    def all(self, limit: int = 100, offset: int = 0) -> List[Dict]:
+    def all(self, limit: int = 100, offset: int = 0) -> list[dict]:
         """Get all documents. No read lock needed."""
         query = "SELECT data FROM documents LIMIT ? OFFSET ?"
         cursor = self._connection.execute(query, (limit, offset))
         return [json.loads(row[0]) for row in cursor.fetchall()]
 
-    def all_cursor(self, after_id: Optional[int] = None, limit: int = 100) -> Dict:
+    def all_cursor(self, after_id: int | None = None, limit: int = 100) -> dict:
         """
         Cursor-based pagination for better performance on large datasets.
 
@@ -446,7 +454,7 @@ class KenobiX:
 
     def search_pattern(
         self, key: str, pattern: str, limit: int = 100, offset: int = 0
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """
         Search documents matching a regex pattern.
 
@@ -463,9 +471,11 @@ class KenobiX:
             ValueError: If the key or pattern is invalid.
         """
         if not key or not isinstance(key, str):
-            raise ValueError("key must be a non-empty string")
+            msg = "key must be a non-empty string"
+            raise ValueError(msg)
         if not pattern or not isinstance(pattern, str):
-            raise ValueError("pattern must be a non-empty string")
+            msg = "pattern must be a non-empty string"
+            raise ValueError(msg)
 
         # Pattern search can't use indexes regardless
         query = """
@@ -476,7 +486,7 @@ class KenobiX:
         cursor = self._connection.execute(query, (key, pattern, limit, offset))
         return [json.loads(row[0]) for row in cursor.fetchall()]
 
-    def find_any(self, key: str, value_list: List[Any]) -> List[Dict]:
+    def find_any(self, key: str, value_list: list[Any]) -> list[dict]:
         """
         Return documents where key matches any value in value_list.
 
@@ -511,7 +521,7 @@ class KenobiX:
 
         return [json.loads(row[0]) for row in cursor.fetchall()]
 
-    def find_all(self, key: str, value_list: List[Any]) -> List[Dict]:
+    def find_all(self, key: str, value_list: list[Any]) -> list[dict]:
         """
         Return documents where the key contains all values in value_list.
 
@@ -554,7 +564,7 @@ class KenobiX:
         """
         return self.executor.submit(func, *args, **kwargs)
 
-    def explain(self, operation: str, *args) -> List[tuple]:
+    def explain(self, operation: str, *args) -> list[tuple]:
         """
         Show query execution plan for optimization.
 
@@ -586,15 +596,16 @@ class KenobiX:
             query = "EXPLAIN QUERY PLAN SELECT data FROM documents"
             cursor = self._connection.execute(query)
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            msg = f"Unknown operation: {operation}"
+            raise ValueError(msg)
 
         return cursor.fetchall()
 
-    def get_indexed_fields(self) -> Set[str]:
+    def get_indexed_fields(self) -> set[str]:
         """Return set of fields that have indexes."""
         return self._indexed_fields.copy()
 
-    def stats(self) -> Dict[str, Any]:
+    def stats(self) -> dict[str, Any]:
         """
         Get database statistics.
 

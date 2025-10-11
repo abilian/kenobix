@@ -9,7 +9,7 @@ test:
 	pytest tests -v
 
 test-cov:
-	pytest tests --cov=kenobix --cov-report=html --cov-report=term
+	pytest --cov=kenobix --cov-report=html --cov-report=term
 
 
 check: lint
