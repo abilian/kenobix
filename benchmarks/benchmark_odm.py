@@ -122,7 +122,9 @@ def benchmark_raw_count(db, field: str, value) -> float:
         query = f"SELECT COUNT(*) FROM documents WHERE {safe_field} = ?"
         cursor = db._connection.execute(query, (value,))
     else:
-        query = f"SELECT COUNT(*) FROM documents WHERE json_extract(data, '$.{field}') = ?"
+        query = (
+            f"SELECT COUNT(*) FROM documents WHERE json_extract(data, '$.{field}') = ?"
+        )
         cursor = db._connection.execute(query, (value,))
     _ = cursor.fetchone()[0]
     return time.time() - start
@@ -171,7 +173,7 @@ def run_odm_benchmark(size: int) -> dict:
     print("Note: Each test runs 5 times; results show trimmed mean (discard min/max)")
 
     indexed_fields = ["name", "email", "age"]
-    NUM_ITERATIONS = 5
+    num_iterations = 5
 
     # Generate test data
     print("\nGenerating test data...")
@@ -196,7 +198,7 @@ def run_odm_benchmark(size: int) -> dict:
     # Raw - run multiple times with fresh database each time
     raw_insert_times = []
     raw_db_paths = []
-    for i in range(NUM_ITERATIONS):
+    for i in range(num_iterations):
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
             db_path = tmp.name
             raw_db_paths.append(db_path)
@@ -205,12 +207,14 @@ def run_odm_benchmark(size: int) -> dict:
         insert_time = benchmark_raw_insert_many(db, user_data_list)
         raw_insert_times.append(insert_time)
         db.close()
-        print(f"  Raw iteration {i+1}: {insert_time:.4f}s", end="\r")
+        print(f"  Raw iteration {i + 1}: {insert_time:.4f}s", end="\r")
 
     raw_insert_time = trimmed_mean(raw_insert_times)
     results["raw_insert_many_time"] = raw_insert_time
     results["raw_insert_many_rate"] = size / raw_insert_time
-    print(f"  Raw:    {raw_insert_time:.4f}s ({size / raw_insert_time:.0f} docs/s) [trimmed mean]")
+    print(
+        f"  Raw:    {raw_insert_time:.4f}s ({size / raw_insert_time:.0f} docs/s) [trimmed mean]"
+    )
 
     # Keep one database for further tests
     raw_db_path = raw_db_paths[0]
@@ -220,7 +224,7 @@ def run_odm_benchmark(size: int) -> dict:
     # ODM - run multiple times with fresh database each time
     odm_insert_times = []
     odm_db_paths = []
-    for i in range(NUM_ITERATIONS):
+    for i in range(num_iterations):
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
             db_path = tmp.name
             odm_db_paths.append(db_path)
@@ -230,12 +234,14 @@ def run_odm_benchmark(size: int) -> dict:
         insert_time = benchmark_odm_insert_many(user_data_list)
         odm_insert_times.append(insert_time)
         db.close()
-        print(f"  ODM iteration {i+1}: {insert_time:.4f}s", end="\r")
+        print(f"  ODM iteration {i + 1}: {insert_time:.4f}s", end="\r")
 
     odm_insert_time = trimmed_mean(odm_insert_times)
     results["odm_insert_many_time"] = odm_insert_time
     results["odm_insert_many_rate"] = size / odm_insert_time
-    print(f"  ODM:    {odm_insert_time:.4f}s ({size / odm_insert_time:.0f} docs/s) [trimmed mean]")
+    print(
+        f"  ODM:    {odm_insert_time:.4f}s ({size / odm_insert_time:.0f} docs/s) [trimmed mean]"
+    )
     print(f"  Overhead: {(odm_insert_time / raw_insert_time - 1) * 100:.1f}%")
 
     # Keep one database for further tests
@@ -260,7 +266,7 @@ def run_odm_benchmark(size: int) -> dict:
 
     # Raw - run multiple times
     raw_search_times = []
-    for i in range(NUM_ITERATIONS):
+    for _ in range(num_iterations):
         search_time, raw_count = benchmark_raw_search_indexed(
             raw_db, "email", "user_500@example.com"
         )
@@ -268,11 +274,13 @@ def run_odm_benchmark(size: int) -> dict:
 
     raw_search_time = trimmed_mean(raw_search_times)
     results["raw_search_indexed_time"] = raw_search_time
-    print(f"  Raw:    {raw_search_time * 1000:.3f}ms ({raw_count} results) [trimmed mean]")
+    print(
+        f"  Raw:    {raw_search_time * 1000:.3f}ms ({raw_count} results) [trimmed mean]"
+    )
 
     # ODM - run multiple times
     odm_search_times = []
-    for i in range(NUM_ITERATIONS):
+    for _ in range(num_iterations):
         search_time, odm_count = benchmark_odm_search_indexed(
             "email", "user_500@example.com"
         )
@@ -280,7 +288,9 @@ def run_odm_benchmark(size: int) -> dict:
 
     odm_search_time = trimmed_mean(odm_search_times)
     results["odm_search_indexed_time"] = odm_search_time
-    print(f"  ODM:    {odm_search_time * 1000:.3f}ms ({odm_count} results) [trimmed mean]")
+    print(
+        f"  ODM:    {odm_search_time * 1000:.3f}ms ({odm_count} results) [trimmed mean]"
+    )
     print(f"  Overhead: {(odm_search_time / raw_search_time - 1) * 100:.1f}%")
 
     # ===== Test 3: Search All (pagination) =====
@@ -292,25 +302,29 @@ def run_odm_benchmark(size: int) -> dict:
 
     # Raw - run multiple times
     raw_all_times = []
-    for i in range(NUM_ITERATIONS):
+    for _ in range(num_iterations):
         t, count = benchmark_raw_search_all(raw_db, limit=100)
         raw_all_times.append(t)
 
     raw_all_time = trimmed_mean(raw_all_times)
     raw_all_count = count
     results["raw_all_time"] = raw_all_time
-    print(f"  Raw:    {raw_all_time * 1000:.3f}ms ({raw_all_count} results) [trimmed mean]")
+    print(
+        f"  Raw:    {raw_all_time * 1000:.3f}ms ({raw_all_count} results) [trimmed mean]"
+    )
 
     # ODM - run multiple times
     odm_all_times = []
-    for i in range(NUM_ITERATIONS):
+    for _ in range(num_iterations):
         t, count = benchmark_odm_search_all(limit=100)
         odm_all_times.append(t)
 
     odm_all_time = trimmed_mean(odm_all_times)
     odm_all_count = count
     results["odm_all_time"] = odm_all_time
-    print(f"  ODM:    {odm_all_time * 1000:.3f}ms ({odm_all_count} results) [trimmed mean]")
+    print(
+        f"  ODM:    {odm_all_time * 1000:.3f}ms ({odm_all_count} results) [trimmed mean]"
+    )
     print(f"  Overhead: {(odm_all_time / raw_all_time - 1) * 100:.1f}%")
 
     # ===== Test 4: Count =====
@@ -322,7 +336,7 @@ def run_odm_benchmark(size: int) -> dict:
 
     # Raw - run multiple times
     raw_count_times = []
-    for i in range(NUM_ITERATIONS):
+    for _ in range(num_iterations):
         count_time = benchmark_raw_count(raw_db, "active", True)
         raw_count_times.append(count_time)
 
@@ -332,7 +346,7 @@ def run_odm_benchmark(size: int) -> dict:
 
     # ODM - run multiple times
     odm_count_times = []
-    for i in range(NUM_ITERATIONS):
+    for _ in range(num_iterations):
         count_time = benchmark_odm_count("active", True)
         odm_count_times.append(count_time)
 
@@ -346,7 +360,7 @@ def run_odm_benchmark(size: int) -> dict:
 
     # Raw - run multiple times, recreating data each time
     raw_delete_times = []
-    for i in range(NUM_ITERATIONS):
+    for _ in range(num_iterations):
         # Re-insert inactive users for deletion test
         inactive_users = [doc for doc in user_data_list if not doc["active"]]
         raw_db.insert_many(inactive_users)
@@ -360,7 +374,7 @@ def run_odm_benchmark(size: int) -> dict:
 
     # ODM - run multiple times, recreating data each time
     odm_delete_times = []
-    for i in range(NUM_ITERATIONS):
+    for _ in range(num_iterations):
         # Re-insert inactive users for deletion test
         inactive_users = [User(**doc) for doc in user_data_list if not doc["active"]]
         User.insert_many(inactive_users)
@@ -413,9 +427,7 @@ def run_odm_benchmark(size: int) -> dict:
         odm_single_avg = sum(odm_single_times) / len(odm_single_times)
         results["odm_insert_single_avg"] = odm_single_avg
         print(f"  ODM:    {odm_single_avg * 1000:.3f}ms avg")
-        print(
-            f"  Overhead: {(odm_single_avg / raw_single_avg - 1) * 100:.1f}% slower"
-        )
+        print(f"  Overhead: {(odm_single_avg / raw_single_avg - 1) * 100:.1f}% slower")
         single_db.close()
     finally:
         pathlib.Path(single_db_path).unlink()

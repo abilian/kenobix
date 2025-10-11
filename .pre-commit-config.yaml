@@ -11,7 +11,7 @@ exclude: >
 repos:
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
     - id: check-merge-conflict
     - id: trailing-whitespace
@@ -23,30 +23,30 @@ repos:
 
 
   - repo: https://github.com/abravalheri/validate-pyproject
-    rev: v0.23
+    rev: v0.24.1
     hooks:
       - id: validate-pyproject
 
   - repo: https://github.com/psf/black
-    rev: 25.1.0
+    rev: 25.9.0
     hooks:
       - id: black
 
   - repo: https://github.com/keewis/blackdoc
-    rev: v0.3.9
+    rev: v0.4.3
     hooks:
       - id: blackdoc
         additional_dependencies: ["black==25.1.0"]
       - id: blackdoc-autoupdate-black
 
   - repo: https://github.com/PyCQA/flake8
-    rev: 7.1.1
+    rev: 7.3.0
     hooks:
       - id: flake8
         args: ["--ignore=E704,E203,W503,W605,W293,W291,E501"]
 
   - repo: https://github.com/PyCQA/isort
-    rev: 6.0.0
+    rev: 7.0.0
     hooks:
       - id: isort
 

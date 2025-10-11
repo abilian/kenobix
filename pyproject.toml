@@ -44,6 +44,7 @@ dev = [
     "nox>=2025.5.1",
     "coverage>=7.10.7",
     "pytest-coverage>=0.0",
+    "pre-commit>=4.3.0",
 ]
 
 [project.urls]
