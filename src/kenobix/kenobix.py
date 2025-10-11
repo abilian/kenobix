@@ -19,7 +19,10 @@ Original KenobiDB Copyright (c) Harrison Erd
 Licensed under BSD-3-Clause
 """
 
+from __future__ import annotations
+
 import json
+import re
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from threading import RLock
@@ -110,7 +113,6 @@ class KenobiX:
     @staticmethod
     def _add_regexp_support(conn):
         """Add REGEXP function support."""
-        import re
 
         def regexp(pattern, value):
             return re.search(pattern, value) is not None

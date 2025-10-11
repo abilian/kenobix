@@ -4,7 +4,7 @@
 
 KenobiX is a document database with proper SQLite3 JSON optimization, delivering 15-53x faster searches and 80-665x faster updates compared to basic implementations.
 
-Based on [KenobiDB](https://github.com/patx/kenobi) by Harrison Erd, enhanced with generated column indexes and optimized concurrency.
+Based on [KenobiDB](https://github.com/patx/kenobi) by Harrison Erd, enhanced with generated column indexes and optimized concurrency. ("KenobiX" = "Kenobi + indeX").
 
 ## Why KenobiX?
 

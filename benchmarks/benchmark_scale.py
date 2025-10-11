@@ -273,9 +273,7 @@ def print_scale_speedup(old: dict, new: dict) -> None:
     if new["insert_time"] > 0:
         ratio = new["insert_time"] / old["insert_time"]
         if ratio > 1:
-            print(
-                f"  Insert overhead: {ratio:.2f}x (indexed version creates indexes)"
-            )
+            print(f"  Insert overhead: {ratio:.2f}x (indexed version creates indexes)")
         else:
             print(f"  Insert speedup: {1 / ratio:.2f}x")
 

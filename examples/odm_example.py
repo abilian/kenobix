@@ -9,6 +9,7 @@ Requirements:
     pip install kenobix[odm]
 """
 
+import time
 from dataclasses import dataclass
 
 from kenobix import Document, KenobiX
@@ -151,7 +152,6 @@ def main():
 
     # 11. Performance: indexed vs non-indexed
     print("\nPerformance comparison:")
-    import time
 
     # Indexed search (fast)
     start = time.time()

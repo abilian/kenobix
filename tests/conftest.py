@@ -83,9 +83,7 @@ def db_path(tmp_path):
     Returns:
         pathlib.Path: path to database within pytest managed temporary folder
     """
-    path_db = tmp_path.joinpath("test_kenobi.db")
-
-    return path_db
+    return tmp_path.joinpath("test_kenobi.db")
 
 
 @pytest.fixture

@@ -35,13 +35,15 @@ Example:
     alice.delete()
 """
 
+from __future__ import annotations
+
 import json
 from dataclasses import fields, is_dataclass
 from typing import Any, ClassVar, Self, TypeVar
 
 import cattrs
 
-from .kenobix import KenobiX
+from .kenobix import KenobiX  # noqa: TC001 - Used at runtime for db._connection, etc.
 
 T = TypeVar("T", bound="Document")
 

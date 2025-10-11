@@ -21,21 +21,17 @@ lint.extend-ignore = [
     "TD002", #  	[ ] missing-todo-author
     "TD003", #  	[ ] missing-todo-link
     "T201", #    	[*] print
-    "RET504", #  	[*] unnecessary-assign
-    "PT012", #   	[ ] pytest-raises-with-multiple-statements
-    "E501", #    	[ ] line-too-long
-    "FURB152", # 3.14 != Pi. This one is insane.
     "RUF005", # Confusing syntax
+    "E501", #    	[ ] line-too-long
     "S101", # use of assert
+    "RUF001", #	[ ] ambiguous-unicode-character-string
     # FIX or review This
     "S608", # Potential SQL injection
     # Review later
     "SLF001", #	[ ] private-member-access
     "CPY001", #	[ ] missing-copyright-notice
     "PT011", # 	[ ] pytest-raises-too-broad
-    "RUF001", #	[ ] ambiguous-unicode-character-string
-    "C901", #   	complex-structure
-    "PLC0415", #	import-outside-top-level
+    # "PLC0415", #	import-outside-top-level
     "PTH118", # 	os-path-join
     "S311", #   	suspicious-non-cryptographic-random-usage
     "EXE001", # 	shebang-not-executable
