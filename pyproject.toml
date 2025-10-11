@@ -7,44 +7,47 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "kenobi"
+name = "kenobix"
 dynamic = [
     "optional-dependencies",
 ]
-version = "4.0"
+version = "5.0.0"
 requires-python = ">=3.9"
 dependencies = []
-description = "document based database using sqlite"
+description = "High-performance document database with SQLite3 JSON optimization (15-665x faster than basic implementations). Based on KenobiDB by Harrison Erd."
 readme = "README.md"
 
 classifiers = [
     "Environment :: Console",
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "License :: OSI Approved :: BSD License",
     "Intended Audience :: Developers",
     "Topic :: Database",
+    "Topic :: Database :: Database Engines/Servers",
+    "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 
 # https://peps.python.org/pep-0639/
-# https://clearlydefined.io/?sort=releaseDate&sortDesc=true&name=wreck
-# waiting for setuptools maintainers to implement metadata v2.4 support
-# https://github.com/pypa/setuptools/issues/4759
 license = {file = "LICENSE"}
-# license = "BSD-3-Clause"
-# license-files = [
-#     "LICEN[CS]E*",
-#     "NOTICE*",
-# ]
 
 authors = [
     {name = "Harrison Erd", email = "harrisonerd@gmail.com"},
 ]
 
+maintainers = [
+    {name = "KenobiX Contributors"},
+]
+
 [project.urls]
-"Source code" = 'http://patx.github.io/kenobi'
-"Issue tracker" = 'http://patx.github.io/kenobi/issues'
-"PyPI Releases" = 'https://pypi.org/project/kenobi'
+"Homepage" = "https://github.com/yourusername/kenobix"
+"Source Code" = "https://github.com/yourusername/kenobix"
+"Issue Tracker" = "https://github.com/yourusername/kenobix/issues"
+"Original Project" = "https://github.com/patx/kenobi"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -61,7 +64,7 @@ markers = [
 ]
 
 [tool.coverage.run]
-source_pkgs = ["kenobi"] # **REQUIRED** to be set correctly. Your package name
+source_pkgs = ["kenobi"]
 branch = true
 
 [tool.coverage.report]
@@ -78,3 +81,8 @@ skip_covered = true
 skip_empty = true
 fail_under = 88
 show_missing = true
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.4",
+]

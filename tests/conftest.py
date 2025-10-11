@@ -17,7 +17,7 @@ from pathlib import PurePath
 
 import pytest
 
-from kenobi import KenobiDB
+from kenobi import KenobiX
 
 pytest_plugins = []
 
@@ -101,9 +101,9 @@ def create_db(db_path, request):
            db = create_db()
 
     Returns:
-        KenobiDB: database instance
+        KenobiX: database instance
     """
-    db = KenobiDB(db_path)
+    db = KenobiX(db_path)
 
     def cleanup():
         """Pretty way but works.
