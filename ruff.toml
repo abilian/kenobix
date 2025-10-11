@@ -1,0 +1,45 @@
+preview = true
+
+lint.select = [
+    "ALL",
+]
+
+lint.extend-ignore = [
+    # Later...
+    "ANN", # flake8-annotations
+    "D", # pydocstyle
+    "DOC",
+    "TRY",
+    "PLR",
+    "ARG",
+    "FBT",
+    "ERA",
+    "A",
+    # False positives
+    "COM812", #  	[*] missing-trailing-comma
+    "ISC001",
+    "TD002", #  	[ ] missing-todo-author
+    "TD003", #  	[ ] missing-todo-link
+    "T201", #    	[*] print
+    "RET504", #  	[*] unnecessary-assign
+    "PT012", #   	[ ] pytest-raises-with-multiple-statements
+    "E501", #    	[ ] line-too-long
+    "FURB152", # 3.14 != Pi. This one is insane.
+    "RUF005", # Confusing syntax
+    "S101", # use of assert
+    # Review later
+    "ASYNC109", # timeouts in asyncio
+    #  Fix
+    "CPY001", #  	[ ] missing-copyright-notice
+    "SLF001", #  	[ ] private-member-access
+    "PT011", #   	[ ] pytest-raises-too-broad
+    "BLE001", #  	[ ] blind-except
+    "INP001", #  	[ ] implicit-namespace-package
+    "PLC1901",
+    "RUF006", # asyncio-dangling-task
+    "RUF001", # ambiguous-unicode-character-string
+    "RUF034", # useless-if-else
+    "RUF022", # unsorted-dunder-all
+    "RUF029", # unused-async
+    "RUF036", # none-not-at-end-of-union
+]

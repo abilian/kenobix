@@ -27,23 +27,21 @@ import time
 from typing import Dict, List
 
 # Add src to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from kenobi import KenobiX
+import pathlib
+
+from kenobix import KenobiX
 
 
 def random_string(length: int = 10) -> str:
     """Generate random string."""
-    return ''.join(random.choices(string.ascii_letters, k=length))
+    return "".join(random.choices(string.ascii_letters, k=length))
 
 
 def generate_simple_document(i: int) -> Dict:
     """Generate simple document: 3 fields, ~50 bytes."""
-    return {
-        "id": i,
-        "name": f"user_{i}",
-        "value": i * 10
-    }
+    return {"id": i, "name": f"user_{i}", "value": i * 10}
 
 
 def generate_medium_document(i: int) -> Dict:
@@ -80,7 +78,7 @@ def generate_complex_document(i: int) -> Dict:
             "theme": "dark" if i % 2 else "light",
             "language": ["en", "es", "fr"][i % 3],
             "notifications": i % 3 == 0,
-        }
+        },
     }
 
 
@@ -123,7 +121,7 @@ def generate_very_complex_document(i: int) -> Dict:
                 "show_email": i % 4 == 0,
                 "show_phone": i % 6 == 0,
                 "searchable": i % 3 == 0,
-            }
+            },
         },
         "stats": {
             "login_count": i * 10,
@@ -134,8 +132,14 @@ def generate_very_complex_document(i: int) -> Dict:
         },
         "history": [
             {"action": "login", "timestamp": f"2024-03-{(i % 28) + 1:02d}"},
-            {"action": "update_profile", "timestamp": f"2024-03-{((i + 1) % 28) + 1:02d}"},
-            {"action": "post_content", "timestamp": f"2024-03-{((i + 2) % 28) + 1:02d}"},
+            {
+                "action": "update_profile",
+                "timestamp": f"2024-03-{((i + 1) % 28) + 1:02d}",
+            },
+            {
+                "action": "post_content",
+                "timestamp": f"2024-03-{((i + 2) % 28) + 1:02d}",
+            },
         ],
         "billing": {
             "plan": ["free", "basic", "premium", "enterprise"][i % 4],
@@ -143,19 +147,29 @@ def generate_very_complex_document(i: int) -> Dict:
             "amount": [0, 9.99, 29.99, 99.99][i % 4],
             "currency": "USD",
             "next_billing": f"2024-04-{(i % 28) + 1:02d}",
-        }
+        },
     }
 
 
 COMPLEXITY_LEVELS = {
     "simple": (generate_simple_document, "~50 bytes", ["id", "name"]),
     "medium": (generate_medium_document, "~100 bytes", ["id", "name", "age", "city"]),
-    "complex": (generate_complex_document, "~300 bytes", ["id", "name", "email", "age", "city"]),
-    "very_complex": (generate_very_complex_document, "~1KB", ["id", "name", "email", "age", "city", "score"]),
+    "complex": (
+        generate_complex_document,
+        "~300 bytes",
+        ["id", "name", "email", "age", "city"],
+    ),
+    "very_complex": (
+        generate_very_complex_document,
+        "~1KB",
+        ["id", "name", "email", "age", "city", "score"],
+    ),
 }
 
 
-def benchmark_operations(db, documents: List[Dict], db_name: str, complexity: str) -> Dict:
+def benchmark_operations(
+    db, documents: List[Dict], db_name: str, complexity: str
+) -> Dict:
     """Run benchmark operations on database."""
     generator, size_desc, indexed_fields = COMPLEXITY_LEVELS[complexity]
 
@@ -176,7 +190,7 @@ def benchmark_operations(db, documents: List[Dict], db_name: str, complexity: st
     results["insert_rate"] = len(documents) / insert_time if insert_time > 0 else 0
 
     # 2. Single searches (indexed)
-    print(f"    Searching indexed field (id)...")
+    print("    Searching indexed field (id)...")
     search_times = []
     for _ in range(10):
         search_id = random.randint(0, len(documents) - 1)
@@ -188,7 +202,7 @@ def benchmark_operations(db, documents: List[Dict], db_name: str, complexity: st
 
     # 3. Single search (non-indexed)
     if "city" in documents[0]:
-        print(f"    Searching non-indexed field (city)...")
+        print("    Searching non-indexed field (city)...")
         search_times = []
         for _ in range(10):
             start = time.time()
@@ -199,7 +213,7 @@ def benchmark_operations(db, documents: List[Dict], db_name: str, complexity: st
         results["search_unindexed_avg"] = None
 
     # 4. Retrieve all (pagination test)
-    print(f"    Retrieving pages...")
+    print("    Retrieving pages...")
     start = time.time()
     total = 0
     for offset in range(0, min(1000, len(documents)), 100):
@@ -209,14 +223,14 @@ def benchmark_operations(db, documents: List[Dict], db_name: str, complexity: st
     results["retrieve_count"] = total
 
     # 5. Update operations
-    print(f"    Updating 100 documents...")
+    print("    Updating 100 documents...")
     start = time.time()
     for i in range(100):
         db.update("id", i, {"updated": True})
     results["update_time"] = time.time() - start
 
     # 6. Delete operations
-    print(f"    Deleting 100 documents...")
+    print("    Deleting 100 documents...")
     start = time.time()
     for i in range(len(documents) - 100, len(documents)):
         db.remove("id", i)
@@ -242,7 +256,7 @@ def run_complexity_benchmark(complexity: str, count: int) -> List[Dict]:
     results = []
 
     # Test without indexes
-    print(f"\n  Testing KenobiX (no indexes)...")
+    print("\n  Testing KenobiX (no indexes)...")
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
         db_path = tmp.name
 
@@ -252,14 +266,14 @@ def run_complexity_benchmark(complexity: str, count: int) -> List[Dict]:
         db.close()
 
         # Get file size
-        result["db_file_size"] = os.path.getsize(db_path)
+        result["db_file_size"] = pathlib.Path(db_path).stat().st_size
         results.append(result)
     finally:
-        if os.path.exists(db_path):
-            os.unlink(db_path)
+        if pathlib.Path(db_path).exists():
+            pathlib.Path(db_path).unlink()
 
     # Test with indexes
-    print(f"\n  Testing KenobiX (with indexes)...")
+    print("\n  Testing KenobiX (with indexes)...")
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
         db_path = tmp.name
 
@@ -269,12 +283,12 @@ def run_complexity_benchmark(complexity: str, count: int) -> List[Dict]:
         db.close()
 
         # Get file size
-        result["db_file_size"] = os.path.getsize(db_path)
+        result["db_file_size"] = pathlib.Path(db_path).stat().st_size
         result["indexed_fields"] = indexed_fields
         results.append(result)
     finally:
-        if os.path.exists(db_path):
-            os.unlink(db_path)
+        if pathlib.Path(db_path).exists():
+            pathlib.Path(db_path).unlink()
 
     return results
 
@@ -283,15 +297,14 @@ def format_time(seconds: float) -> str:
     """Format time in appropriate units."""
     if seconds < 0.001:
         return f"{seconds * 1_000_000:.1f}µs"
-    elif seconds < 1:
+    if seconds < 1:
         return f"{seconds * 1000:.2f}ms"
-    else:
-        return f"{seconds:.2f}s"
+    return f"{seconds:.2f}s"
 
 
 def format_size(bytes: int) -> str:
     """Format byte size."""
-    for unit in ['B', 'KB', 'MB']:
+    for unit in ["B", "KB", "MB"]:
         if bytes < 1024:
             return f"{bytes:.1f}{unit}"
         bytes /= 1024
@@ -313,55 +326,69 @@ def print_comparison_table(all_results: List[Dict]):
             continue
 
         print(f"\n{'─' * 120}")
-        print(f"Document Complexity: {complexity.upper()} (Document size: {comp_results[0]['doc_size']})")
+        print(
+            f"Document Complexity: {complexity.upper()} (Document size: {comp_results[0]['doc_size']})"
+        )
         print(f"{'─' * 120}")
 
         # Table header
-        print(f"{'Database':<30} {'Insert':<18} {'Search (idx)':<15} {'Search (no idx)':<15} {'Update 100':<12} {'File Size':<12}")
-        print(f"{'':<30} {'Time | Rate':<18} {'Avg | Min':<15} {'Avg':<15} {'Time':<12} {'':<12}")
+        print(
+            f"{'Database':<30} {'Insert':<18} {'Search (idx)':<15} {'Search (no idx)':<15} {'Update 100':<12} {'File Size':<12}"
+        )
+        print(
+            f"{'':<30} {'Time | Rate':<18} {'Avg | Min':<15} {'Avg':<15} {'Time':<12} {'':<12}"
+        )
         print(f"{'─' * 120}")
 
         for result in comp_results:
-            name = result['database']
-            if result.get('indexed_fields'):
+            name = result["database"]
+            if result.get("indexed_fields"):
                 name += f" (+{len(result['indexed_fields'])} idx)"
 
-            insert_str = f"{format_time(result['insert_time'])} | {result['insert_rate']:.0f}/s"
+            insert_str = (
+                f"{format_time(result['insert_time'])} | {result['insert_rate']:.0f}/s"
+            )
 
             search_idx_str = f"{format_time(result['search_indexed_avg'])} | {format_time(result['search_indexed_min'])}"
 
-            if result.get('search_unindexed_avg'):
-                search_noidx_str = format_time(result['search_unindexed_avg'])
+            if result.get("search_unindexed_avg"):
+                search_noidx_str = format_time(result["search_unindexed_avg"])
             else:
                 search_noidx_str = "N/A"
 
-            update_str = format_time(result['update_time'])
-            size_str = format_size(result['db_file_size'])
+            update_str = format_time(result["update_time"])
+            size_str = format_size(result["db_file_size"])
 
-            print(f"{name:<30} {insert_str:<18} {search_idx_str:<15} {search_noidx_str:<15} {update_str:<12} {size_str:<12}")
+            print(
+                f"{name:<30} {insert_str:<18} {search_idx_str:<15} {search_noidx_str:<15} {update_str:<12} {size_str:<12}"
+            )
 
         # Show speedup comparison
         print()
         if len(comp_results) == 2:
             old, new = comp_results[0], comp_results[1]
 
-            if new['search_indexed_avg'] > 0:
-                speedup = old['search_indexed_avg'] / new['search_indexed_avg']
+            if new["search_indexed_avg"] > 0:
+                speedup = old["search_indexed_avg"] / new["search_indexed_avg"]
                 print(f"  ✓ Indexed search speedup: {speedup:.1f}x faster")
 
-            if old.get('search_unindexed_avg') and new.get('search_unindexed_avg'):
-                speedup = old['search_unindexed_avg'] / new['search_unindexed_avg']
+            if old.get("search_unindexed_avg") and new.get("search_unindexed_avg"):
+                speedup = old["search_unindexed_avg"] / new["search_unindexed_avg"]
                 print(f"  ✓ Unindexed search speedup: {speedup:.1f}x faster")
 
-            if new['update_time'] > 0:
-                speedup = old['update_time'] / new['update_time']
+            if new["update_time"] > 0:
+                speedup = old["update_time"] / new["update_time"]
                 if speedup > 1:
                     print(f"  ✓ Update speedup: {speedup:.1f}x faster")
                 else:
-                    print(f"  ⚠ Update slower: {1/speedup:.1f}x (index maintenance)")
+                    print(f"  ⚠ Update slower: {1 / speedup:.1f}x (index maintenance)")
 
-            size_overhead = (new['db_file_size'] - old['db_file_size']) / old['db_file_size'] * 100
-            print(f"  ℹ Storage overhead: {size_overhead:+.1f}% (indexes use VIRTUAL columns, minimal overhead)")
+            size_overhead = (
+                (new["db_file_size"] - old["db_file_size"]) / old["db_file_size"] * 100
+            )
+            print(
+                f"  ℹ Storage overhead: {size_overhead:+.1f}% (indexes use VIRTUAL columns, minimal overhead)"
+            )
 
     print("=" * 120)
     print("\nKey Insights:")
@@ -376,26 +403,26 @@ def main():
         "--size",
         type=int,
         default=10000,
-        help="Number of documents to test (default: 10000)"
+        help="Number of documents to test (default: 10000)",
     )
     parser.add_argument(
         "--complexities",
         type=str,
         default="simple,medium,complex,very_complex",
-        help="Comma-separated list of complexity levels to test"
+        help="Comma-separated list of complexity levels to test",
     )
     parser.add_argument(
         "--output",
         choices=["table", "csv", "json"],
         default="table",
-        help="Output format"
+        help="Output format",
     )
 
     args = parser.parse_args()
 
     complexities = [c.strip() for c in args.complexities.split(",")]
 
-    print(f"Benchmarking Record Complexity Impact")
+    print("Benchmarking Record Complexity Impact")
     print(f"Document count: {args.size:,}")
     print(f"Complexity levels: {', '.join(complexities)}")
 
@@ -415,11 +442,15 @@ def main():
     elif args.output == "json":
         print(json.dumps(all_results, indent=2))
     elif args.output == "csv":
-        print("database,complexity,doc_count,insert_time,search_indexed_avg,search_unindexed_avg,update_time,db_file_size")
+        print(
+            "database,complexity,doc_count,insert_time,search_indexed_avg,search_unindexed_avg,update_time,db_file_size"
+        )
         for r in all_results:
-            print(f"{r['database']},{r['complexity']},{r['doc_count']},"
-                  f"{r['insert_time']},{r['search_indexed_avg']},"
-                  f"{r.get('search_unindexed_avg', 'N/A')},{r['update_time']},{r['db_file_size']}")
+            print(
+                f"{r['database']},{r['complexity']},{r['doc_count']},"
+                f"{r['insert_time']},{r['search_indexed_avg']},"
+                f"{r.get('search_unindexed_avg', 'N/A')},{r['update_time']},{r['db_file_size']}"
+            )
 
 
 if __name__ == "__main__":

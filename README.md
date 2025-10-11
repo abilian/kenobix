@@ -9,7 +9,7 @@ Based on [KenobiDB](https://github.com/patx/kenobi) by Harrison Erd, enhanced wi
 ## Why KenobiX?
 
 ```python
-from kenobi import KenobiX
+from kenobix import KenobiX
 
 # Create database with indexed fields
 db = KenobiX('app.db', indexed_fields=['user_id', 'email', 'status'])
@@ -41,9 +41,10 @@ See `benchmarks/` for detailed performance analysis.
 - **VIRTUAL Generated Columns** - Minimal storage overhead (~7-20% depending on document complexity)
 - **Thread-Safe** - No RLock on reads, SQLite handles concurrency with WAL mode
 - **MongoDB-like API** - Familiar insert/search/update operations
+- **Optional ODM Layer** - Type-safe dataclass-based models (install with `pip install kenobix[odm]`)
 - **Cursor Pagination** - Efficient pagination for large datasets
 - **Query Analysis** - Built-in `explain()` for optimization
-- **Zero Runtime Dependencies** - Only Python stdlib
+- **Zero Runtime Dependencies** - Only Python stdlib (cattrs optional for ODM)
 
 ## Installation
 
@@ -62,7 +63,7 @@ pip install -e .
 ## Quick Start
 
 ```python
-from kenobi import KenobiX
+from kenobix import KenobiX
 
 # Initialize with indexed fields for best performance
 db = KenobiX('myapp.db', indexed_fields=['user_id', 'email', 'status'])
@@ -97,6 +98,79 @@ if result['has_more']:
 plan = db.explain('search', 'email', 'test@example.com')
 print(plan)  # Shows if index is being used
 ```
+
+## Object Document Mapper (ODM)
+
+KenobiX includes an optional ODM layer for type-safe, Pythonic document operations using dataclasses.
+
+### Installation
+
+```bash
+pip install kenobix[odm]  # Includes cattrs for serialization
+```
+
+### Usage
+
+```python
+from dataclasses import dataclass
+from typing import List
+from kenobix import KenobiX, Document
+
+# Define your models
+@dataclass
+class User(Document):
+    name: str
+    email: str
+    age: int
+    active: bool = True
+
+@dataclass
+class Post(Document):
+    title: str
+    content: str
+    author_id: int
+    tags: List[str]
+    published: bool = False
+
+# Setup
+db = KenobiX('app.db', indexed_fields=['email', 'name', 'author_id'])
+Document.set_database(db)
+
+# Create
+user = User(name="Alice", email="alice@example.com", age=30)
+user.save()  # Returns user with _id set
+
+# Read
+alice = User.get(email="alice@example.com")
+users = User.filter(age=30)
+all_users = User.all(limit=100)
+
+# Update
+alice.age = 31
+alice.save()
+
+# Delete
+alice.delete()
+
+# Bulk operations
+User.insert_many([user1, user2, user3])
+User.delete_many(active=False)
+
+# Count
+total = User.count()
+active_count = User.count(active=True)
+```
+
+### ODM Features
+
+- **Type Safety** - Full type hints with autocomplete support
+- **Automatic Serialization** - Uses cattrs for nested structures
+- **Indexed Queries** - Automatically uses KenobiX indexes
+- **Bulk Operations** - Efficient insert_many, delete_many
+- **Familiar API** - Similar to MongoDB ODMs (ODMantic, MongoEngine)
+- **Zero Boilerplate** - Just use @dataclass decorator
+
+See `examples/odm_example.py` for complete examples.
 
 ## When to Use KenobiX
 
@@ -184,7 +258,7 @@ from kenobi import KenobiDB
 db = KenobiDB('app.db')
 
 # New (with performance boost)
-from kenobi import KenobiX
+from kenobix import KenobiX
 db = KenobiX('app.db', indexed_fields=['your', 'query', 'fields'])
 ```
 
@@ -273,6 +347,8 @@ Contributions welcome! Please:
 - Added cursor-based pagination
 - Added query plan analysis (`explain()`)
 - Added `search_optimized()` for multi-field queries
+- Added optional ODM layer with dataclass support
+- Modified insert/insert_many to return IDs
 - Comprehensive benchmark suite
 - Full API compatibility with KenobiDB
 

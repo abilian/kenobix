@@ -17,12 +17,12 @@ from pathlib import PurePath
 
 import pytest
 
-from kenobi import KenobiX
+from kenobix import KenobiX
 
 pytest_plugins = []
 
 
-@pytest.fixture()
+@pytest.fixture
 def prepare_folders_files(request):
     """Prepare folders and files within folder."""
 
@@ -77,7 +77,7 @@ def prepare_folders_files(request):
             shutil.rmtree(abspath_folder, ignore_errors=True)
 
 
-@pytest.fixture()
+@pytest.fixture
 def db_path(tmp_path):
     """
     Returns:
@@ -88,7 +88,7 @@ def db_path(tmp_path):
     return path_db
 
 
-@pytest.fixture()
+@pytest.fixture
 def create_db(db_path, request):
     """Per test function create database in pytest managed temporary folder
 

@@ -26,8 +26,7 @@ from functools import partial
 import pytest
 
 # Import the fast version
-from kenobi import KenobiX
-
+from kenobix import KenobiX
 
 # Reuse the same test data as the original tests
 testdata_insert_single_document = (
@@ -77,13 +76,13 @@ ids_insert_single_document = (
 )
 
 
-@pytest.fixture()
+@pytest.fixture
 def db_path_fast(tmp_path):
     """Path to fast DB in temp folder."""
     return tmp_path.joinpath("test_kenobix.db")
 
 
-@pytest.fixture()
+@pytest.fixture
 def create_db_fast(db_path_fast, request):
     """Create KenobiX instance with indexed fields for testing.
 
@@ -98,7 +97,7 @@ def create_db_fast(db_path_fast, request):
         """Initialize database with optional indexed fields."""
         if indexed_fields is None:
             # Default indexed fields for tests
-            indexed_fields = ['key', 'id', 'name', 'age', 'color', 'city']
+            indexed_fields = ["key", "id", "name", "age", "color", "city"]
 
         db = KenobiX(db_path_fast, indexed_fields=indexed_fields)
 
@@ -419,9 +418,9 @@ def test_safe_query_handling_fast(create_db_fast):
     db.insert(document)
     results = db.search("key", "value OR 1=1")
     results_count_actual = len(results)
-    assert (
-        results_count_actual == results_count_expected
-    ), "Unsafe query execution detected"
+    assert results_count_actual == results_count_expected, (
+        "Unsafe query execution detected"
+    )
 
 
 def test_indexed_search_performance(create_db_fast):
@@ -431,18 +430,18 @@ def test_indexed_search_performance(create_db_fast):
         {"name": f"user_{i}", "age": 20 + (i % 50), "city": f"city_{i % 10}"}
         for i in range(1000)
     ]
-    db = create_db_fast(indexed_fields=['name', 'age'])
+    db = create_db_fast(indexed_fields=["name", "age"])
     db.insert_many(documents)
 
     # Verify that indexed search uses index
-    plan = db.explain('search', 'name', 'user_500')
+    plan = db.explain("search", "name", "user_500")
     plan_str = str(plan[0])
-    assert 'SEARCH' in plan_str or 'INDEX' in plan_str, "Should use index for 'name'"
+    assert "SEARCH" in plan_str or "INDEX" in plan_str, "Should use index for 'name'"
 
     # Search should work and be fast
-    result = db.search('name', 'user_500')
+    result = db.search("name", "user_500")
     assert len(result) == 1
-    assert result[0]['name'] == 'user_500'
+    assert result[0]["name"] == "user_500"
 
 
 def test_search_optimized_multi_field(create_db_fast):
@@ -452,7 +451,7 @@ def test_search_optimized_multi_field(create_db_fast):
         {"name": "Bob", "age": 30, "city": "LA"},
         {"name": "Alice", "age": 25, "city": "NYC"},
     ]
-    db = create_db_fast(indexed_fields=['name', 'age', 'city'])
+    db = create_db_fast(indexed_fields=["name", "age", "city"])
     db.insert_many(documents)
 
     # Search with multiple fields
@@ -474,41 +473,41 @@ def test_cursor_pagination(create_db_fast):
 
     # First page
     result = db.all_cursor(limit=10)
-    assert len(result['documents']) == 10
-    assert result['has_more'] is True
-    assert result['next_cursor'] is not None
+    assert len(result["documents"]) == 10
+    assert result["has_more"] is True
+    assert result["next_cursor"] is not None
 
     # Second page
-    result2 = db.all_cursor(after_id=result['next_cursor'], limit=10)
-    assert len(result2['documents']) == 10
-    assert result2['has_more'] is True
+    result2 = db.all_cursor(after_id=result["next_cursor"], limit=10)
+    assert len(result2["documents"]) == 10
+    assert result2["has_more"] is True
 
     # Verify no overlap
-    first_ids = [doc['key'] for doc in result['documents']]
-    second_ids = [doc['key'] for doc in result2['documents']]
+    first_ids = [doc["key"] for doc in result["documents"]]
+    second_ids = [doc["key"] for doc in result2["documents"]]
     assert len(set(first_ids) & set(second_ids)) == 0, "No overlap between pages"
 
 
 def test_get_indexed_fields(create_db_fast):
     """Test getting the list of indexed fields."""
-    db = create_db_fast(indexed_fields=['name', 'age', 'email'])
+    db = create_db_fast(indexed_fields=["name", "age", "email"])
     indexed = db.get_indexed_fields()
-    assert 'name' in indexed
-    assert 'age' in indexed
-    assert 'email' in indexed
+    assert "name" in indexed
+    assert "age" in indexed
+    assert "email" in indexed
 
 
 def test_stats(create_db_fast):
     """Test database statistics."""
     documents = [{"key": f"value{i}"} for i in range(100)]
-    db = create_db_fast(indexed_fields=['key'])
+    db = create_db_fast(indexed_fields=["key"])
     db.insert_many(documents)
 
     stats = db.stats()
-    assert stats['document_count'] == 100
-    assert stats['database_size_bytes'] > 0
-    assert 'key' in stats['indexed_fields']
-    assert stats['wal_mode'] is True
+    assert stats["document_count"] == 100
+    assert stats["database_size_bytes"] > 0
+    assert "key" in stats["indexed_fields"]
+    assert stats["wal_mode"] is True
 
 
 def test_find_any_indexed(create_db_fast):
@@ -519,13 +518,13 @@ def test_find_any_indexed(create_db_fast):
         {"key": "value3"},
         {"key": "value4"},
     ]
-    db = create_db_fast(indexed_fields=['key'])
+    db = create_db_fast(indexed_fields=["key"])
     db.insert_many(documents)
 
     # Find any with indexed field
-    results = db.find_any('key', ['value1', 'value3', 'value5'])
+    results = db.find_any("key", ["value1", "value3", "value5"])
     assert len(results) == 2
-    keys = [doc['key'] for doc in results]
-    assert 'value1' in keys
-    assert 'value3' in keys
-    assert 'value5' not in keys
+    keys = [doc["key"] for doc in results]
+    assert "value1" in keys
+    assert "value3" in keys
+    assert "value5" not in keys

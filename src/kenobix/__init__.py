@@ -13,5 +13,13 @@ Enhanced with SQLite3 JSON optimizations for 15-665x faster operations.
 
 from .kenobix import KenobiX
 
-__all__ = ("KenobiX",)
+# ODM is optional - only import if cattrs is available
+try:
+    from .odm import Document
+
+    __all__ = ("KenobiX", "Document")
+except ImportError:
+    # cattrs not installed, ODM not available
+    __all__ = ("KenobiX",)
+
 __version__ = "5.0.0"

@@ -51,7 +51,7 @@ maintainers = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["kenobi*"]
+include = ["kenobix*"]
 
 [tool.setuptools.dynamic]
 optional-dependencies.pip = { file = ['requirements/pip.lock'] }
@@ -64,7 +64,7 @@ markers = [
 ]
 
 [tool.coverage.run]
-source_pkgs = ["kenobi"]
+source_pkgs = ["kenobix"]
 branch = true
 
 [tool.coverage.report]
@@ -85,4 +85,6 @@ show_missing = true
 [dependency-groups]
 dev = [
     "pytest>=8.3.4",
+    "cattrs>=23.1.0",
+    "ruff>=0.14.0",
 ]

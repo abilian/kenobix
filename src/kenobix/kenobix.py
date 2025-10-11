@@ -70,15 +70,12 @@ class KenobiX:
         """Create table with generated columns for indexed fields."""
         with self._write_lock:
             # Build CREATE TABLE with generated columns
-            columns = [
-                "id INTEGER PRIMARY KEY AUTOINCREMENT",
-                "data TEXT NOT NULL"
-            ]
+            columns = ["id INTEGER PRIMARY KEY AUTOINCREMENT", "data TEXT NOT NULL"]
 
             # Add generated columns for indexed fields (skip 'id' since it's the primary key)
             for field in self._indexed_fields:
                 # Skip 'id' field - it's already the primary key
-                if field == 'id':
+                if field == "id":
                     continue
 
                 # Use VIRTUAL to avoid storage overhead
@@ -89,7 +86,9 @@ class KenobiX:
                     f"(json_extract(data, '$.{field}')) VIRTUAL"
                 )
 
-            create_table = f"CREATE TABLE IF NOT EXISTS documents (\n    {', '.join(columns)}\n)"
+            create_table = (
+                f"CREATE TABLE IF NOT EXISTS documents (\n    {', '.join(columns)}\n)"
+            )
             self._connection.execute(create_table)
 
             # Create indexes on generated columns
@@ -106,14 +105,16 @@ class KenobiX:
     def _sanitize_field_name(field: str) -> str:
         """Convert field name to valid SQL identifier."""
         # Remove special characters, replace with underscore
-        return ''.join(c if c.isalnum() else '_' for c in field)
+        return "".join(c if c.isalnum() else "_" for c in field)
 
     @staticmethod
     def _add_regexp_support(conn):
         """Add REGEXP function support."""
         import re
+
         def regexp(pattern, value):
             return re.search(pattern, value) is not None
+
         conn.create_function("REGEXP", 2, regexp)
 
     def create_index(self, field: str) -> bool:
@@ -159,20 +160,30 @@ class KenobiX:
                 # Column already exists or can't be added
                 return False
 
-    def insert(self, document: Dict[str, Any]) -> bool:
-        """Insert a document. Uses write lock."""
+    def insert(self, document: Dict[str, Any]) -> int:
+        """
+        Insert a document. Uses write lock.
+
+        Args:
+            document: Dictionary to insert
+
+        Returns:
+            The ID of the inserted document
+
+        Raises:
+            TypeError: If document is not a dict
+        """
         if not isinstance(document, dict):
             raise TypeError("Must insert a dict")
 
         with self._write_lock:
-            self._connection.execute(
-                "INSERT INTO documents (data) VALUES (?)",
-                (json.dumps(document),)
+            cursor = self._connection.execute(
+                "INSERT INTO documents (data) VALUES (?)", (json.dumps(document),)
             )
             self._connection.commit()
-            return True
+            return cursor.lastrowid
 
-    def insert_many(self, document_list: List[Dict[str, Any]]) -> bool:
+    def insert_many(self, document_list: List[Dict[str, Any]]) -> List[int]:
         """
         Insert multiple documents (list of dicts) into the database.
 
@@ -180,7 +191,7 @@ class KenobiX:
             document_list: The list of documents to insert.
 
         Returns:
-            True upon successful insertion.
+            List of IDs of the inserted documents.
 
         Raises:
             TypeError: If the provided object is not a list of dicts.
@@ -191,12 +202,17 @@ class KenobiX:
             raise TypeError("Must insert a list of dicts")
 
         with self._write_lock:
+            cursor = self._connection.execute("SELECT MAX(id) FROM documents")
+            last_id = cursor.fetchone()[0] or 0
+
             self._connection.executemany(
                 "INSERT INTO documents (data) VALUES (?)",
                 [(json.dumps(doc),) for doc in document_list],
             )
             self._connection.commit()
-            return True
+
+            # Return the range of IDs that were inserted
+            return list(range(last_id + 1, last_id + 1 + len(document_list)))
 
     def remove(self, key: str, value: Any) -> int:
         """
@@ -258,7 +274,9 @@ class KenobiX:
                 update_query = f"UPDATE documents SET data = ? WHERE {safe_field} = ?"
                 cursor = self._connection.execute(select_query, (id_value,))
             else:
-                select_query = "SELECT data FROM documents WHERE json_extract(data, '$.' || ?) = ?"
+                select_query = (
+                    "SELECT data FROM documents WHERE json_extract(data, '$.' || ?) = ?"
+                )
                 update_query = "UPDATE documents SET data = ? WHERE json_extract(data, '$.' || ?) = ?"
                 cursor = self._connection.execute(select_query, (id_key, id_value))
 
@@ -273,9 +291,13 @@ class KenobiX:
                 document.update(new_dict)
 
                 if id_key in self._indexed_fields:
-                    self._connection.execute(update_query, (json.dumps(document), id_value))
+                    self._connection.execute(
+                        update_query, (json.dumps(document), id_value)
+                    )
                 else:
-                    self._connection.execute(update_query, (json.dumps(document), id_key, id_value))
+                    self._connection.execute(
+                        update_query, (json.dumps(document), id_key, id_value)
+                    )
 
             self._connection.commit()
             return True
@@ -292,7 +314,9 @@ class KenobiX:
             self._connection.commit()
             return True
 
-    def search(self, key: str, value: Any, limit: int = 100, offset: int = 0) -> List[Dict]:
+    def search(
+        self, key: str, value: Any, limit: int = 100, offset: int = 0
+    ) -> List[Dict]:
         """
         Search documents. No lock needed for reads!
         Automatically uses index if available.
@@ -311,7 +335,7 @@ class KenobiX:
 
         # Special case: searching by 'id' uses the primary key column directly
         # since we can't create a generated column for it
-        if key == 'id':
+        if key == "id":
             # Search using json_extract on the id field in the data
             query = (
                 "SELECT data FROM documents "
@@ -322,7 +346,9 @@ class KenobiX:
         # Check if field is indexed - if so, use direct column query
         elif key in self._indexed_fields:
             safe_field = self._sanitize_field_name(key)
-            query = f"SELECT data FROM documents WHERE {safe_field} = ? LIMIT ? OFFSET ?"
+            query = (
+                f"SELECT data FROM documents WHERE {safe_field} = ? LIMIT ? OFFSET ?"
+            )
             cursor = self._connection.execute(query, (value, limit, offset))
         else:
             # Fall back to json_extract (no index)
@@ -413,12 +439,14 @@ class KenobiX:
         next_cursor = rows[-1][0] if rows else None
 
         return {
-            'documents': documents,
-            'next_cursor': next_cursor,
-            'has_more': has_more
+            "documents": documents,
+            "next_cursor": next_cursor,
+            "has_more": has_more,
         }
 
-    def search_pattern(self, key: str, pattern: str, limit: int = 100, offset: int = 0) -> List[Dict]:
+    def search_pattern(
+        self, key: str, pattern: str, limit: int = 100, offset: int = 0
+    ) -> List[Dict]:
         """
         Search documents matching a regex pattern.
 
@@ -509,9 +537,7 @@ class KenobiX:
                 WHERE value IN ({placeholders})
             ) = ?
         """
-        cursor = self._connection.execute(
-            query, [key] + value_list + [len(value_list)]
-        )
+        cursor = self._connection.execute(query, [key] + value_list + [len(value_list)])
         return [json.loads(row[0]) for row in cursor.fetchall()]
 
     def execute_async(self, func, *args, **kwargs):
@@ -547,7 +573,7 @@ class KenobiX:
             List of query plan tuples from EXPLAIN QUERY PLAN
         """
         # Map operation to SQL query
-        if operation == 'search':
+        if operation == "search":
             key, value = args[0], args[1]
             if key in self._indexed_fields:
                 safe_field = self._sanitize_field_name(key)
@@ -556,7 +582,7 @@ class KenobiX:
             else:
                 query = "EXPLAIN QUERY PLAN SELECT data FROM documents WHERE json_extract(data, '$.' || ?) = ?"
                 cursor = self._connection.execute(query, (key, value))
-        elif operation == 'all':
+        elif operation == "all":
             query = "EXPLAIN QUERY PLAN SELECT data FROM documents"
             cursor = self._connection.execute(query)
         else:
@@ -584,10 +610,10 @@ class KenobiX:
         db_size = cursor.fetchone()[0]
 
         return {
-            'document_count': doc_count,
-            'database_size_bytes': db_size,
-            'indexed_fields': list(self._indexed_fields),
-            'wal_mode': True
+            "document_count": doc_count,
+            "database_size_bytes": db_size,
+            "indexed_fields": list(self._indexed_fields),
+            "wal_mode": True,
         }
 
     def close(self):
