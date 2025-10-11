@@ -184,6 +184,8 @@ class KenobiX:
                 "INSERT INTO documents (data) VALUES (?)", (json.dumps(document),)
             )
             self._connection.commit()
+            # SQLite always returns lastrowid after INSERT
+            assert cursor.lastrowid is not None
             return cursor.lastrowid
 
     def insert_many(self, document_list: list[dict[str, Any]]) -> list[int]:
@@ -389,8 +391,8 @@ class KenobiX:
             return self.all()
 
         # Build WHERE clause using indexed columns when possible
-        where_parts = []
-        params = []
+        where_parts: list[str] = []
+        params: list[Any] = []
 
         for key, value in filters.items():
             if key in self._indexed_fields:

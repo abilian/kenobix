@@ -87,7 +87,7 @@ class Document:
         so they need to call super().__init__() in __post_init__.
         """
         # Store _id in instance dict (not as dataclass field)
-        self._id = None
+        self._id: int | None = None
 
         if self._converter is None:
             self.__class__._converter = cattrs.Converter()
@@ -96,7 +96,7 @@ class Document:
         """Called by dataclass after __init__. Initialize ODM state."""
         # Initialize _id if not already set
         if not hasattr(self, "_id"):
-            self._id = None
+            self._id: int | None = None
 
         if self._converter is None:
             self.__class__._converter = cattrs.Converter()
@@ -128,7 +128,7 @@ class Document:
         """
         # Get all dataclass fields except private ones
         data = {}
-        for field in fields(self):
+        for field in fields(self):  # type: ignore[arg-type]  # self is a dataclass instance
             if not field.name.startswith("_"):
                 value = getattr(self, field.name)
                 data[field.name] = value
@@ -254,8 +254,8 @@ class Document:
         else:
             # Use search_optimized if available
             # Build query manually to get both id and data
-            where_parts = []
-            params = []
+            where_parts: list[str] = []
+            params: list[Any] = []
 
             for key, value in filters.items():
                 if key in db._indexed_fields:
@@ -342,8 +342,8 @@ class Document:
             raise ValueError(msg)
 
         # Build WHERE clause
-        where_parts = []
-        params = []
+        where_parts: list[str] = []
+        params: list[Any] = []
 
         for key, value in filters.items():
             if key in db._indexed_fields:
@@ -417,8 +417,8 @@ class Document:
         if not filters:
             cursor = db._connection.execute("SELECT COUNT(*) FROM documents")
         else:
-            where_parts = []
-            params = []
+            where_parts: list[str] = []
+            params: list[Any] = []
 
             for key, value in filters.items():
                 if key in db._indexed_fields:
