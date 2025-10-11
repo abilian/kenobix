@@ -311,6 +311,74 @@ def format_size(bytes: int) -> str:
     return f"{bytes:.1f}GB"
 
 
+def print_complexity_section(complexity: str, comp_results: list[dict]) -> None:
+    """Print results for a single complexity level."""
+    print(f"\n{'─' * 120}")
+    print(
+        f"Document Complexity: {complexity.upper()} (Document size: {comp_results[0]['doc_size']})"
+    )
+    print(f"{'─' * 120}")
+
+    # Table header
+    print(
+        f"{'Database':<30} {'Insert':<18} {'Search (idx)':<15} {'Search (no idx)':<15} {'Update 100':<12} {'File Size':<12}"
+    )
+    print(
+        f"{'':<30} {'Time | Rate':<18} {'Avg | Min':<15} {'Avg':<15} {'Time':<12} {'':<12}"
+    )
+    print(f"{'─' * 120}")
+
+    for result in comp_results:
+        name = result["database"]
+        if result.get("indexed_fields"):
+            name += f" (+{len(result['indexed_fields'])} idx)"
+
+        insert_str = (
+            f"{format_time(result['insert_time'])} | {result['insert_rate']:.0f}/s"
+        )
+
+        search_idx_str = f"{format_time(result['search_indexed_avg'])} | {format_time(result['search_indexed_min'])}"
+
+        if result.get("search_unindexed_avg"):
+            search_noidx_str = format_time(result["search_unindexed_avg"])
+        else:
+            search_noidx_str = "N/A"
+
+        update_str = format_time(result["update_time"])
+        size_str = format_size(result["db_file_size"])
+
+        print(
+            f"{name:<30} {insert_str:<18} {search_idx_str:<15} {search_noidx_str:<15} {update_str:<12} {size_str:<12}"
+        )
+
+
+def print_speedup_comparison(old: dict, new: dict) -> None:
+    """Print speedup comparison between two benchmark results."""
+    print()
+
+    if new["search_indexed_avg"] > 0:
+        speedup = old["search_indexed_avg"] / new["search_indexed_avg"]
+        print(f"  ✓ Indexed search speedup: {speedup:.1f}x faster")
+
+    if old.get("search_unindexed_avg") and new.get("search_unindexed_avg"):
+        speedup = old["search_unindexed_avg"] / new["search_unindexed_avg"]
+        print(f"  ✓ Unindexed search speedup: {speedup:.1f}x faster")
+
+    if new["update_time"] > 0:
+        speedup = old["update_time"] / new["update_time"]
+        if speedup > 1:
+            print(f"  ✓ Update speedup: {speedup:.1f}x faster")
+        else:
+            print(f"  ⚠ Update slower: {1 / speedup:.1f}x (index maintenance)")
+
+    size_overhead = (
+        (new["db_file_size"] - old["db_file_size"]) / old["db_file_size"] * 100
+    )
+    print(
+        f"  ℹ Storage overhead: {size_overhead:+.1f}% (indexes use VIRTUAL columns, minimal overhead)"
+    )
+
+
 def print_comparison_table(all_results: list[dict]):
     """Print results in comparison table."""
     print("\n" + "=" * 120)
@@ -325,70 +393,11 @@ def print_comparison_table(all_results: list[dict]):
         if not comp_results:
             continue
 
-        print(f"\n{'─' * 120}")
-        print(
-            f"Document Complexity: {complexity.upper()} (Document size: {comp_results[0]['doc_size']})"
-        )
-        print(f"{'─' * 120}")
+        print_complexity_section(complexity, comp_results)
 
-        # Table header
-        print(
-            f"{'Database':<30} {'Insert':<18} {'Search (idx)':<15} {'Search (no idx)':<15} {'Update 100':<12} {'File Size':<12}"
-        )
-        print(
-            f"{'':<30} {'Time | Rate':<18} {'Avg | Min':<15} {'Avg':<15} {'Time':<12} {'':<12}"
-        )
-        print(f"{'─' * 120}")
-
-        for result in comp_results:
-            name = result["database"]
-            if result.get("indexed_fields"):
-                name += f" (+{len(result['indexed_fields'])} idx)"
-
-            insert_str = (
-                f"{format_time(result['insert_time'])} | {result['insert_rate']:.0f}/s"
-            )
-
-            search_idx_str = f"{format_time(result['search_indexed_avg'])} | {format_time(result['search_indexed_min'])}"
-
-            if result.get("search_unindexed_avg"):
-                search_noidx_str = format_time(result["search_unindexed_avg"])
-            else:
-                search_noidx_str = "N/A"
-
-            update_str = format_time(result["update_time"])
-            size_str = format_size(result["db_file_size"])
-
-            print(
-                f"{name:<30} {insert_str:<18} {search_idx_str:<15} {search_noidx_str:<15} {update_str:<12} {size_str:<12}"
-            )
-
-        # Show speedup comparison
-        print()
+        # Show speedup comparison if we have two results (no idx vs indexed)
         if len(comp_results) == 2:
-            old, new = comp_results[0], comp_results[1]
-
-            if new["search_indexed_avg"] > 0:
-                speedup = old["search_indexed_avg"] / new["search_indexed_avg"]
-                print(f"  ✓ Indexed search speedup: {speedup:.1f}x faster")
-
-            if old.get("search_unindexed_avg") and new.get("search_unindexed_avg"):
-                speedup = old["search_unindexed_avg"] / new["search_unindexed_avg"]
-                print(f"  ✓ Unindexed search speedup: {speedup:.1f}x faster")
-
-            if new["update_time"] > 0:
-                speedup = old["update_time"] / new["update_time"]
-                if speedup > 1:
-                    print(f"  ✓ Update speedup: {speedup:.1f}x faster")
-                else:
-                    print(f"  ⚠ Update slower: {1 / speedup:.1f}x (index maintenance)")
-
-            size_overhead = (
-                (new["db_file_size"] - old["db_file_size"]) / old["db_file_size"] * 100
-            )
-            print(
-                f"  ℹ Storage overhead: {size_overhead:+.1f}% (indexes use VIRTUAL columns, minimal overhead)"
-            )
+            print_speedup_comparison(comp_results[0], comp_results[1])
 
     print("=" * 120)
     print("\nKey Insights:")

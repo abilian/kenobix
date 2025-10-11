@@ -161,6 +161,272 @@ def trimmed_mean(values: list[float]) -> float:
     return sum(trimmed) / len(trimmed)
 
 
+def run_bulk_insert_test(
+    user_data_list: list[dict],
+    indexed_fields: list[str],
+    num_iterations: int,
+    size: int,
+) -> tuple[dict, object, object]:
+    """Run bulk insert benchmark for both raw and ODM."""
+    print("\n1. Bulk Insert (5 iterations)")
+
+    # Raw - run multiple times with fresh database each time
+    raw_insert_times = []
+    raw_db_paths = []
+    for i in range(num_iterations):
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+            db_path = tmp.name
+            raw_db_paths.append(db_path)
+
+        db = KenobiX(db_path, indexed_fields=indexed_fields)
+        insert_time = benchmark_raw_insert_many(db, user_data_list)
+        raw_insert_times.append(insert_time)
+        db.close()
+        print(f"  Raw iteration {i + 1}: {insert_time:.4f}s", end="\r")
+
+    raw_insert_time = trimmed_mean(raw_insert_times)
+    print(
+        f"  Raw:    {raw_insert_time:.4f}s ({size / raw_insert_time:.0f} docs/s) [trimmed mean]"
+    )
+
+    # Keep one database for further tests
+    raw_db_path = raw_db_paths[0]
+    raw_db = KenobiX(raw_db_path, indexed_fields=indexed_fields)
+    raw_db.insert_many(user_data_list)
+
+    # ODM - run multiple times with fresh database each time
+    odm_insert_times = []
+    odm_db_paths = []
+    for i in range(num_iterations):
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+            db_path = tmp.name
+            odm_db_paths.append(db_path)
+
+        db = KenobiX(db_path, indexed_fields=indexed_fields)
+        Document.set_database(db)
+        insert_time = benchmark_odm_insert_many(user_data_list)
+        odm_insert_times.append(insert_time)
+        db.close()
+        print(f"  ODM iteration {i + 1}: {insert_time:.4f}s", end="\r")
+
+    odm_insert_time = trimmed_mean(odm_insert_times)
+    print(
+        f"  ODM:    {odm_insert_time:.4f}s ({size / odm_insert_time:.0f} docs/s) [trimmed mean]"
+    )
+    print(f"  Overhead: {(odm_insert_time / raw_insert_time - 1) * 100:.1f}%")
+
+    # Keep one database for further tests
+    odm_db_path = odm_db_paths[0]
+    odm_db = KenobiX(odm_db_path, indexed_fields=indexed_fields)
+    Document.set_database(odm_db)
+    users = [User(**data) for data in user_data_list]
+    User.insert_many(users)
+
+    # Cleanup extra databases
+    for path in raw_db_paths[1:]:
+        pathlib.Path(path).unlink(missing_ok=True)
+    for path in odm_db_paths[1:]:
+        pathlib.Path(path).unlink(missing_ok=True)
+
+    results = {
+        "raw_insert_many_time": raw_insert_time,
+        "raw_insert_many_rate": size / raw_insert_time,
+        "odm_insert_many_time": odm_insert_time,
+        "odm_insert_many_rate": size / odm_insert_time,
+    }
+
+    return results, raw_db, odm_db
+
+
+def run_search_indexed_test(raw_db, num_iterations: int) -> dict:
+    """Run search by indexed field benchmark."""
+    print("\n2. Search by Indexed Field (5 iterations)")
+
+    # Warmup to ensure SQLite caches are populated
+    _ = raw_db.search("email", "user_500@example.com")
+    _ = User.filter(email="user_500@example.com")
+
+    # Raw - run multiple times
+    raw_search_times = []
+    for _ in range(num_iterations):
+        search_time, raw_count = benchmark_raw_search_indexed(
+            raw_db, "email", "user_500@example.com"
+        )
+        raw_search_times.append(search_time)
+
+    raw_search_time = trimmed_mean(raw_search_times)
+    print(
+        f"  Raw:    {raw_search_time * 1000:.3f}ms ({raw_count} results) [trimmed mean]"
+    )
+
+    # ODM - run multiple times
+    odm_search_times = []
+    for _ in range(num_iterations):
+        search_time, odm_count = benchmark_odm_search_indexed(
+            "email", "user_500@example.com"
+        )
+        odm_search_times.append(search_time)
+
+    odm_search_time = trimmed_mean(odm_search_times)
+    print(
+        f"  ODM:    {odm_search_time * 1000:.3f}ms ({odm_count} results) [trimmed mean]"
+    )
+    print(f"  Overhead: {(odm_search_time / raw_search_time - 1) * 100:.1f}%")
+
+    return {
+        "raw_search_indexed_time": raw_search_time,
+        "odm_search_indexed_time": odm_search_time,
+    }
+
+
+def run_retrieve_all_test(raw_db, num_iterations: int) -> dict:
+    """Run retrieve all (pagination) benchmark."""
+    print("\n3. Retrieve All (5 iterations)")
+
+    # Warmup
+    _ = raw_db.all(limit=100)
+    _ = User.all(limit=100)
+
+    # Raw - run multiple times
+    raw_all_times = []
+    for _ in range(num_iterations):
+        t, count = benchmark_raw_search_all(raw_db, limit=100)
+        raw_all_times.append(t)
+
+    raw_all_time = trimmed_mean(raw_all_times)
+    raw_all_count = count
+    print(
+        f"  Raw:    {raw_all_time * 1000:.3f}ms ({raw_all_count} results) [trimmed mean]"
+    )
+
+    # ODM - run multiple times
+    odm_all_times = []
+    for _ in range(num_iterations):
+        t, count = benchmark_odm_search_all(limit=100)
+        odm_all_times.append(t)
+
+    odm_all_time = trimmed_mean(odm_all_times)
+    odm_all_count = count
+    print(
+        f"  ODM:    {odm_all_time * 1000:.3f}ms ({odm_all_count} results) [trimmed mean]"
+    )
+    print(f"  Overhead: {(odm_all_time / raw_all_time - 1) * 100:.1f}%")
+
+    return {"raw_all_time": raw_all_time, "odm_all_time": odm_all_time}
+
+
+def run_count_test(raw_db, num_iterations: int) -> dict:
+    """Run count documents benchmark."""
+    print("\n4. Count Documents (5 iterations)")
+
+    # Warmup
+    _ = benchmark_raw_count(raw_db, "active", True)
+    _ = User.count(active=True)
+
+    # Raw - run multiple times
+    raw_count_times = []
+    for _ in range(num_iterations):
+        count_time = benchmark_raw_count(raw_db, "active", True)
+        raw_count_times.append(count_time)
+
+    raw_count_time = trimmed_mean(raw_count_times)
+    print(f"  Raw:    {raw_count_time * 1000:.3f}ms [trimmed mean]")
+
+    # ODM - run multiple times
+    odm_count_times = []
+    for _ in range(num_iterations):
+        count_time = benchmark_odm_count("active", True)
+        odm_count_times.append(count_time)
+
+    odm_count_time = trimmed_mean(odm_count_times)
+    print(f"  ODM:    {odm_count_time * 1000:.3f}ms [trimmed mean]")
+    print(f"  Overhead: {(odm_count_time / raw_count_time - 1) * 100:.1f}%")
+
+    return {"raw_count_time": raw_count_time, "odm_count_time": odm_count_time}
+
+
+def run_delete_many_test(
+    raw_db, user_data_list: list[dict], num_iterations: int
+) -> dict:
+    """Run delete many benchmark."""
+    print("\n5. Delete Many (5 iterations)")
+
+    # Raw - run multiple times, recreating data each time
+    raw_delete_times = []
+    for _ in range(num_iterations):
+        # Re-insert inactive users for deletion test
+        inactive_users = [doc for doc in user_data_list if not doc["active"]]
+        raw_db.insert_many(inactive_users)
+
+        delete_time = benchmark_raw_delete(raw_db, "active", False)
+        raw_delete_times.append(delete_time)
+
+    raw_delete_time = trimmed_mean(raw_delete_times)
+    print(f"  Raw:    {raw_delete_time * 1000:.3f}ms [trimmed mean]")
+
+    # ODM - run multiple times, recreating data each time
+    odm_delete_times = []
+    for _ in range(num_iterations):
+        # Re-insert inactive users for deletion test
+        inactive_users = [User(**doc) for doc in user_data_list if not doc["active"]]
+        User.insert_many(inactive_users)
+
+        delete_time = benchmark_odm_delete("active", False)
+        odm_delete_times.append(delete_time)
+
+    odm_delete_time = trimmed_mean(odm_delete_times)
+    print(f"  ODM:    {odm_delete_time * 1000:.3f}ms [trimmed mean]")
+    print(f"  Overhead: {(odm_delete_time / raw_delete_time - 1) * 100:.1f}%")
+
+    return {"raw_delete_time": raw_delete_time, "odm_delete_time": odm_delete_time}
+
+
+def run_single_insert_test(
+    user_data_list: list[dict], indexed_fields: list[str]
+) -> dict:
+    """Run single insert benchmark."""
+    print("\n6. Single Insert (overhead measurement)")
+
+    # Raw
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+        single_db_path = tmp.name
+
+    try:
+        single_db = KenobiX(single_db_path, indexed_fields=indexed_fields)
+        raw_single_times = []
+        for i in range(100):
+            t = benchmark_raw_insert_single(single_db, user_data_list[i])
+            raw_single_times.append(t)
+        raw_single_avg = sum(raw_single_times) / len(raw_single_times)
+        print(f"  Raw:    {raw_single_avg * 1000:.3f}ms avg")
+        single_db.close()
+    finally:
+        pathlib.Path(single_db_path).unlink()
+
+    # ODM
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+        single_db_path = tmp.name
+
+    try:
+        single_db = KenobiX(single_db_path, indexed_fields=indexed_fields)
+        Document.set_database(single_db)
+        odm_single_times = []
+        for i in range(100):
+            t = benchmark_odm_insert_single(user_data_list[i])
+            odm_single_times.append(t)
+        odm_single_avg = sum(odm_single_times) / len(odm_single_times)
+        print(f"  ODM:    {odm_single_avg * 1000:.3f}ms avg")
+        print(f"  Overhead: {(odm_single_avg / raw_single_avg - 1) * 100:.1f}% slower")
+        single_db.close()
+    finally:
+        pathlib.Path(single_db_path).unlink()
+
+    return {
+        "raw_insert_single_avg": raw_single_avg,
+        "odm_insert_single_avg": odm_single_avg,
+    }
+
+
 def run_odm_benchmark(size: int) -> dict:
     """Run complete ODM vs Raw benchmark suite.
 
@@ -187,250 +453,36 @@ def run_odm_benchmark(size: int) -> dict:
         for i in range(size)
     ]
 
+    # Initialize results dict
     results = {
         "document_count": size,
         "indexed_fields": indexed_fields,
     }
 
-    # ===== Test 1: Bulk Insert =====
-    print("\n1. Bulk Insert (5 iterations)")
-
-    # Raw - run multiple times with fresh database each time
-    raw_insert_times = []
-    raw_db_paths = []
-    for i in range(num_iterations):
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
-            db_path = tmp.name
-            raw_db_paths.append(db_path)
-
-        db = KenobiX(db_path, indexed_fields=indexed_fields)
-        insert_time = benchmark_raw_insert_many(db, user_data_list)
-        raw_insert_times.append(insert_time)
-        db.close()
-        print(f"  Raw iteration {i + 1}: {insert_time:.4f}s", end="\r")
-
-    raw_insert_time = trimmed_mean(raw_insert_times)
-    results["raw_insert_many_time"] = raw_insert_time
-    results["raw_insert_many_rate"] = size / raw_insert_time
-    print(
-        f"  Raw:    {raw_insert_time:.4f}s ({size / raw_insert_time:.0f} docs/s) [trimmed mean]"
+    # Run all tests
+    insert_results, raw_db, odm_db = run_bulk_insert_test(
+        user_data_list, indexed_fields, num_iterations, size
     )
+    results.update(insert_results)
 
-    # Keep one database for further tests
-    raw_db_path = raw_db_paths[0]
-    raw_db = KenobiX(raw_db_path, indexed_fields=indexed_fields)
-    raw_db.insert_many(user_data_list)
+    search_results = run_search_indexed_test(raw_db, num_iterations)
+    results.update(search_results)
 
-    # ODM - run multiple times with fresh database each time
-    odm_insert_times = []
-    odm_db_paths = []
-    for i in range(num_iterations):
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
-            db_path = tmp.name
-            odm_db_paths.append(db_path)
+    all_results = run_retrieve_all_test(raw_db, num_iterations)
+    results.update(all_results)
 
-        db = KenobiX(db_path, indexed_fields=indexed_fields)
-        Document.set_database(db)
-        insert_time = benchmark_odm_insert_many(user_data_list)
-        odm_insert_times.append(insert_time)
-        db.close()
-        print(f"  ODM iteration {i + 1}: {insert_time:.4f}s", end="\r")
+    count_results = run_count_test(raw_db, num_iterations)
+    results.update(count_results)
 
-    odm_insert_time = trimmed_mean(odm_insert_times)
-    results["odm_insert_many_time"] = odm_insert_time
-    results["odm_insert_many_rate"] = size / odm_insert_time
-    print(
-        f"  ODM:    {odm_insert_time:.4f}s ({size / odm_insert_time:.0f} docs/s) [trimmed mean]"
-    )
-    print(f"  Overhead: {(odm_insert_time / raw_insert_time - 1) * 100:.1f}%")
+    delete_results = run_delete_many_test(raw_db, user_data_list, num_iterations)
+    results.update(delete_results)
 
-    # Keep one database for further tests
-    odm_db_path = odm_db_paths[0]
-    odm_db = KenobiX(odm_db_path, indexed_fields=indexed_fields)
-    Document.set_database(odm_db)
-    users = [User(**data) for data in user_data_list]
-    User.insert_many(users)
-
-    # Cleanup extra databases
-    for path in raw_db_paths[1:]:
-        pathlib.Path(path).unlink(missing_ok=True)
-    for path in odm_db_paths[1:]:
-        pathlib.Path(path).unlink(missing_ok=True)
-
-    # ===== Test 2: Search by Indexed Field =====
-    print("\n2. Search by Indexed Field (5 iterations)")
-
-    # Warmup to ensure SQLite caches are populated
-    _ = raw_db.search("email", "user_500@example.com")
-    _ = User.filter(email="user_500@example.com")
-
-    # Raw - run multiple times
-    raw_search_times = []
-    for _ in range(num_iterations):
-        search_time, raw_count = benchmark_raw_search_indexed(
-            raw_db, "email", "user_500@example.com"
-        )
-        raw_search_times.append(search_time)
-
-    raw_search_time = trimmed_mean(raw_search_times)
-    results["raw_search_indexed_time"] = raw_search_time
-    print(
-        f"  Raw:    {raw_search_time * 1000:.3f}ms ({raw_count} results) [trimmed mean]"
-    )
-
-    # ODM - run multiple times
-    odm_search_times = []
-    for _ in range(num_iterations):
-        search_time, odm_count = benchmark_odm_search_indexed(
-            "email", "user_500@example.com"
-        )
-        odm_search_times.append(search_time)
-
-    odm_search_time = trimmed_mean(odm_search_times)
-    results["odm_search_indexed_time"] = odm_search_time
-    print(
-        f"  ODM:    {odm_search_time * 1000:.3f}ms ({odm_count} results) [trimmed mean]"
-    )
-    print(f"  Overhead: {(odm_search_time / raw_search_time - 1) * 100:.1f}%")
-
-    # ===== Test 3: Search All (pagination) =====
-    print("\n3. Retrieve All (5 iterations)")
-
-    # Warmup
-    _ = raw_db.all(limit=100)
-    _ = User.all(limit=100)
-
-    # Raw - run multiple times
-    raw_all_times = []
-    for _ in range(num_iterations):
-        t, count = benchmark_raw_search_all(raw_db, limit=100)
-        raw_all_times.append(t)
-
-    raw_all_time = trimmed_mean(raw_all_times)
-    raw_all_count = count
-    results["raw_all_time"] = raw_all_time
-    print(
-        f"  Raw:    {raw_all_time * 1000:.3f}ms ({raw_all_count} results) [trimmed mean]"
-    )
-
-    # ODM - run multiple times
-    odm_all_times = []
-    for _ in range(num_iterations):
-        t, count = benchmark_odm_search_all(limit=100)
-        odm_all_times.append(t)
-
-    odm_all_time = trimmed_mean(odm_all_times)
-    odm_all_count = count
-    results["odm_all_time"] = odm_all_time
-    print(
-        f"  ODM:    {odm_all_time * 1000:.3f}ms ({odm_all_count} results) [trimmed mean]"
-    )
-    print(f"  Overhead: {(odm_all_time / raw_all_time - 1) * 100:.1f}%")
-
-    # ===== Test 4: Count =====
-    print("\n4. Count Documents (5 iterations)")
-
-    # Warmup
-    _ = benchmark_raw_count(raw_db, "active", True)
-    _ = User.count(active=True)
-
-    # Raw - run multiple times
-    raw_count_times = []
-    for _ in range(num_iterations):
-        count_time = benchmark_raw_count(raw_db, "active", True)
-        raw_count_times.append(count_time)
-
-    raw_count_time = trimmed_mean(raw_count_times)
-    results["raw_count_time"] = raw_count_time
-    print(f"  Raw:    {raw_count_time * 1000:.3f}ms [trimmed mean]")
-
-    # ODM - run multiple times
-    odm_count_times = []
-    for _ in range(num_iterations):
-        count_time = benchmark_odm_count("active", True)
-        odm_count_times.append(count_time)
-
-    odm_count_time = trimmed_mean(odm_count_times)
-    results["odm_count_time"] = odm_count_time
-    print(f"  ODM:    {odm_count_time * 1000:.3f}ms [trimmed mean]")
-    print(f"  Overhead: {(odm_count_time / raw_count_time - 1) * 100:.1f}%")
-
-    # ===== Test 5: Delete Many =====
-    print("\n5. Delete Many (5 iterations)")
-
-    # Raw - run multiple times, recreating data each time
-    raw_delete_times = []
-    for _ in range(num_iterations):
-        # Re-insert inactive users for deletion test
-        inactive_users = [doc for doc in user_data_list if not doc["active"]]
-        raw_db.insert_many(inactive_users)
-
-        delete_time = benchmark_raw_delete(raw_db, "active", False)
-        raw_delete_times.append(delete_time)
-
-    raw_delete_time = trimmed_mean(raw_delete_times)
-    results["raw_delete_time"] = raw_delete_time
-    print(f"  Raw:    {raw_delete_time * 1000:.3f}ms [trimmed mean]")
-
-    # ODM - run multiple times, recreating data each time
-    odm_delete_times = []
-    for _ in range(num_iterations):
-        # Re-insert inactive users for deletion test
-        inactive_users = [User(**doc) for doc in user_data_list if not doc["active"]]
-        User.insert_many(inactive_users)
-
-        delete_time = benchmark_odm_delete("active", False)
-        odm_delete_times.append(delete_time)
-
-    odm_delete_time = trimmed_mean(odm_delete_times)
-    results["odm_delete_time"] = odm_delete_time
-    print(f"  ODM:    {odm_delete_time * 1000:.3f}ms [trimmed mean]")
-    print(f"  Overhead: {(odm_delete_time / raw_delete_time - 1) * 100:.1f}%")
-
-    # Cleanup
+    # Cleanup main test databases
     raw_db.close()
     odm_db.close()
-    pathlib.Path(raw_db_path).unlink()
-    pathlib.Path(odm_db_path).unlink()
 
-    # ===== Test 6: Single Insert (for overhead measurement) =====
-    print("\n6. Single Insert (overhead measurement)")
-
-    # Raw
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
-        single_db_path = tmp.name
-
-    try:
-        single_db = KenobiX(single_db_path, indexed_fields=indexed_fields)
-        raw_single_times = []
-        for i in range(100):
-            t = benchmark_raw_insert_single(single_db, user_data_list[i])
-            raw_single_times.append(t)
-        raw_single_avg = sum(raw_single_times) / len(raw_single_times)
-        results["raw_insert_single_avg"] = raw_single_avg
-        print(f"  Raw:    {raw_single_avg * 1000:.3f}ms avg")
-        single_db.close()
-    finally:
-        pathlib.Path(single_db_path).unlink()
-
-    # ODM
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
-        single_db_path = tmp.name
-
-    try:
-        single_db = KenobiX(single_db_path, indexed_fields=indexed_fields)
-        Document.set_database(single_db)
-        odm_single_times = []
-        for i in range(100):
-            t = benchmark_odm_insert_single(user_data_list[i])
-            odm_single_times.append(t)
-        odm_single_avg = sum(odm_single_times) / len(odm_single_times)
-        results["odm_insert_single_avg"] = odm_single_avg
-        print(f"  ODM:    {odm_single_avg * 1000:.3f}ms avg")
-        print(f"  Overhead: {(odm_single_avg / raw_single_avg - 1) * 100:.1f}% slower")
-        single_db.close()
-    finally:
-        pathlib.Path(single_db_path).unlink()
+    single_results = run_single_insert_test(user_data_list, indexed_fields)
+    results.update(single_results)
 
     return results
 

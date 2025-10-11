@@ -14,6 +14,8 @@ Options:
     --output: Output format (table, csv, json, default: table)
 """
 
+from __future__ import annotations
+
 import argparse
 import json
 import os
@@ -219,6 +221,65 @@ def format_size(bytes: int) -> str:
     return f"{bytes:.1f}TB"
 
 
+def print_size_section(size: int, size_results: list[dict]) -> None:
+    """Print results for a single size level."""
+    print(f"\n{'─' * 100}")
+    print(f"Dataset Size: {size:,} documents")
+    print(f"{'─' * 100}")
+
+    # Header
+    print(
+        f"{'Database':<25} {'Insert':<15} {'Search (idx)':<15} {'Search (no idx)':<15} {'Pagination':<15}"
+    )
+    print(f"{'':<25} {'Time | Rate':<15} {'Time':<15} {'Time':<15} {'Time':<15}")
+    print(f"{'─' * 100}")
+
+    for result in size_results:
+        name = result["name"]
+        if result["indexed_fields"]:
+            name += f" ({len(result['indexed_fields'])} indexes)"
+
+        insert_str = (
+            f"{format_time(result['insert_time'])} | {result['insert_rate']:.0f}/s"
+        )
+        search_idx_str = format_time(result["search_indexed_time"])
+
+        if result["search_unindexed_time"] is not None:
+            search_no_idx_str = format_time(result["search_unindexed_time"])
+        else:
+            search_no_idx_str = "N/A"
+
+        page_str = format_time(result["pagination_time"])
+
+        print(
+            f"{name:<25} {insert_str:<15} {search_idx_str:<15} {search_no_idx_str:<15} {page_str:<15}"
+        )
+
+
+def print_scale_speedup(old: dict, new: dict) -> None:
+    """Print speedup comparison for scale benchmark."""
+    print()
+
+    if new["search_indexed_time"] > 0:
+        speedup = old["search_indexed_time"] / new["search_indexed_time"]
+        print(f"  Indexed search speedup: {speedup:.1f}x faster")
+
+    if old["search_unindexed_time"] and new["search_unindexed_time"]:
+        # Both did unindexed search
+        if new["search_unindexed_time"] > 0:
+            speedup = old["search_unindexed_time"] / new["search_unindexed_time"]
+            print(f"  Unindexed search speedup: {speedup:.1f}x")
+
+    if new["insert_time"] > 0:
+        ratio = new["insert_time"] / old["insert_time"]
+        if ratio > 1:
+            print(
+                f"  Insert overhead: {ratio:.2f}x (indexed version creates indexes)"
+            )
+        else:
+            print(f"  Insert speedup: {1 / ratio:.2f}x")
+
+
 def print_results_table(all_results: list[dict]):
     """Print results in a formatted table."""
     print("\n" + "=" * 100)
@@ -229,66 +290,15 @@ def print_results_table(all_results: list[dict]):
 
     for size in sizes:
         size_results = [r for r in all_results if r["size"] == size]
-        print(f"\n{'─' * 100}")
-        print(f"Dataset Size: {size:,} documents")
-        print(f"{'─' * 100}")
 
-        # Header
-        print(
-            f"{'Database':<25} {'Insert':<15} {'Search (idx)':<15} {'Search (no idx)':<15} {'Pagination':<15}"
-        )
-        print(f"{'':<25} {'Time | Rate':<15} {'Time':<15} {'Time':<15} {'Time':<15}")
-        print(f"{'─' * 100}")
+        print_size_section(size, size_results)
 
-        for result in size_results:
-            name = result["name"]
-            if result["indexed_fields"]:
-                name += f" ({len(result['indexed_fields'])} indexes)"
-
-            insert_str = (
-                f"{format_time(result['insert_time'])} | {result['insert_rate']:.0f}/s"
-            )
-            search_idx_str = format_time(result["search_indexed_time"])
-
-            if result["search_unindexed_time"] is not None:
-                search_no_idx_str = format_time(result["search_unindexed_time"])
-            else:
-                search_no_idx_str = "N/A"
-
-            page_str = format_time(result["pagination_time"])
-
-            print(
-                f"{name:<25} {insert_str:<15} {search_idx_str:<15} {search_no_idx_str:<15} {page_str:<15}"
-            )
-
-        print()
-        # Show speedup
+        # Show speedup if we have two results (no idx vs indexed)
         if len(size_results) == 2:
-            old = size_results[0]
-            new = size_results[1]
-
-            if new["search_indexed_time"] > 0:
-                speedup = old["search_indexed_time"] / new["search_indexed_time"]
-                print(f"  Indexed search speedup: {speedup:.1f}x faster")
-
-            if old["search_unindexed_time"] and new["search_unindexed_time"]:
-                # Both did unindexed search
-                if new["search_unindexed_time"] > 0:
-                    speedup = (
-                        old["search_unindexed_time"] / new["search_unindexed_time"]
-                    )
-                    print(f"  Unindexed search speedup: {speedup:.1f}x")
-
-            if new["insert_time"] > 0:
-                ratio = new["insert_time"] / old["insert_time"]
-                if ratio > 1:
-                    print(
-                        f"  Insert overhead: {ratio:.2f}x (indexed version creates indexes)"
-                    )
-                else:
-                    print(f"  Insert speedup: {1 / ratio:.2f}x")
+            print_scale_speedup(size_results[0], size_results[1])
 
         # DB size
+        print()
         for result in size_results:
             print(
                 f"  {result['name']} database size: {format_size(result['db_size_bytes'])}"
