@@ -134,3 +134,7 @@ dmypy.json
 # Removed from project
 .coverage
 .coverage-*
+
+# Local
+.envrc
+local-notes
