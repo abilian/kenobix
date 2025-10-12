@@ -1,6 +1,6 @@
 [project]
 name = "kenobix"
-version = "5.0.0"
+version = "0.5.0"
 requires-python = ">=3.11"
 description = "Simple document database with SQLite3 JSON optimization, based on KenobiDB by Harrison Erd."
 readme = "README.md"
@@ -24,7 +24,9 @@ classifiers = [
 license = {file = "LICENSE"}
 
 authors = [
+    # Original author (kenobiDB):
     {name = "Harrison Erd", email = "harrisonerd@gmail.com"},
+    # Fork creator (Kenobix)
     {name = "Stefane Fermigier", email = "sf@fermigier.com"},
 ]
 
@@ -32,19 +34,22 @@ maintainers = [
     {name = "KenobiX Contributors"},
 ]
 
+# TODO: should be optional
 dependencies = [
     "cattrs>=25.3.0",
 ]
 
 [dependency-groups]
 dev = [
-    "pytest>=8.3.4",
+    # Linting
     "ruff>=0.14.0",
     "pyrefly>=0.36.2",
-    "nox>=2025.5.1",
-    "coverage>=7.10.7",
-    "pytest-coverage>=0.0",
     "pre-commit>=4.3.0",
+    # Tests
+    "nox>=2025.5.1",
+    "pytest>=8.3.4",
+    "pytest-coverage>=0.0",
+    "coverage>=7.10.7",
 ]
 
 [project.urls]
@@ -56,11 +61,6 @@ dev = [
 [build-system]
 requires = ["uv-build>=0.8.4,<0.9.0"]
 build-backend = "uv_build"
-
-[tool.uv.build-backend]
-module-name = "kenobix"
-module-root = "src"
-
 
 #
 # Pytest
