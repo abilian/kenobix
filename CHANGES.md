@@ -5,6 +5,63 @@ All notable changes to KenobiX will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - 0.7.0
+
+### Added
+
+#### Multi-Collection Support
+- **Database collections** - Multiple isolated collections in a single database
+  - Create collections with `db.collection("name", indexed_fields=[...])`
+  - Dictionary-style access: `db["users"].insert({...})`
+  - Each collection has its own table and indexes
+  - List all collections with `db.collections()`
+  - Collection caching for efficient reuse
+  - Full backward compatibility: existing code uses default "documents" collection
+- **Collection isolation** - Data and indexes are completely separated between collections
+  - Each collection can have different indexed fields
+  - Queries are scoped to individual collections
+  - Transactions work across multiple collections
+  - Collection-specific statistics via `collection.stats()`
+- **17 collection tests** covering isolation, persistence, transactions, and backward compatibility
+
+#### ODM Collection Support
+- **Meta class configuration** for Document models
+  - `Meta.collection_name` - Explicit collection name
+  - `Meta.indexed_fields` - Per-model index configuration
+- **Automatic collection name derivation** from class names
+  - `User` → `users`
+  - `Category` → `categories` (handles pluralization)
+  - `Address` → `addresses`
+  - `Box` → `boxes`
+- **Per-model collections** - Each ODM model uses its own collection
+  - Models are completely isolated from each other
+  - Different models can have same field names without conflict
+  - Transactions work seamlessly across model collections
+- **Collection-specific indexes** - Each model defines its own indexed fields
+  - `User` model can index `["email", "user_id"]`
+  - `Order` model can index `["order_id", "user_id"]`
+  - Indexes are automatically created per collection
+- **16 ODM collection tests** covering pluralization, isolation, indexes, and transactions
+- **Backward compatibility** - Models without Meta use auto-derived collection names
+
+### Changed
+
+#### Test Infrastructure Improvements
+- **Refactored 73 tests** to use pytest fixtures instead of manual `tempfile` management
+
+### Fixed
+- **Database lock error** in `test_isolation_concurrent_transactions`
+  - Issue: Multiple workers tried to initialize database simultaneously causing "database is locked" error
+  - Solution: Create and initialize database before launching multiprocessing workers
+  - Prevents race conditions during SQLite WAL mode initialization
+- Removed unused `contextlib` import from `test_acid_compliance.py`
+
+### Testing
+- All 154 tests passing with improved reliability
+- Test execution time: ~2 seconds for full suite
+- Better test isolation and cleanup with pytest fixtures
+- Improved multiprocessing test stability
+
 ## [0.6.0] - 2025-10-12
 
 ### Added
