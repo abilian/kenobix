@@ -56,12 +56,13 @@ with db.transaction():
 
 ## Features
 
+- **Multi-Collection Support** - Organize data into separate collections (like MongoDB or SQL tables)
 - **Full ACID Transactions** - Context manager API with savepoints for nested transactions
 - **Automatic Index Usage** - Queries automatically use indexes when available, fall back to json_extract
 - **VIRTUAL Generated Columns** - Minimal storage overhead (~7-20% depending on document complexity)
 - **Thread-Safe** - No RLock on reads, SQLite handles concurrency with WAL mode
 - **MongoDB-like API** - Familiar insert/search/update operations
-- **Optional ODM Layer** - Type-safe dataclass-based models (install with `pip install kenobix[odm]`)
+- **Optional ODM Layer** - Type-safe dataclass-based models with per-model collections
 - **Cursor Pagination** - Efficient pagination for large datasets
 - **Query Analysis** - Built-in `explain()` for optimization
 - **Zero Runtime Dependencies** - Only Python stdlib (cattrs optional for ODM)
@@ -69,6 +70,7 @@ with db.transaction():
 ## Documentation
 
 - **[Getting Started](docs/index.md)** - Quick start guide
+- **[Collections Guide](docs/collections.md)** - Multi-collection support and usage
 - **[Transactions](docs/transactions.md)** - Full ACID transaction API guide
 - **[ACID Compliance](docs/dev/acid-compliance.md)** - Comprehensive ACID test results
 - **[ODM Guide](docs/odm.md)** - Complete ODM documentation with examples
@@ -256,6 +258,82 @@ except Exception:
 ```
 
 See [docs/transactions.md](docs/transactions.md) for complete transaction documentation.
+
+## Multi-Collection Support
+
+KenobiX supports organizing data into multiple collections (similar to MongoDB collections or SQL tables). Each collection has its own table, indexes, and schema within a single database file.
+
+### Quick Example
+
+```python
+from kenobix import KenobiX
+
+db = KenobiX('myapp.db')
+
+# Create collections with independent indexes
+users = db.collection('users', indexed_fields=['user_id', 'email'])
+orders = db.collection('orders', indexed_fields=['order_id', 'user_id'])
+products = db.collection('products', indexed_fields=['product_id', 'category'])
+
+# Dictionary-style access
+db['users'].insert({'user_id': 1, 'name': 'Alice', 'email': 'alice@example.com'})
+db['orders'].insert({'order_id': 101, 'user_id': 1, 'amount': 99.99})
+
+# Each collection is completely isolated
+users = db['users'].all(limit=100)
+orders = db['orders'].all(limit=100)
+
+# Transactions work across collections
+with db.transaction():
+    db['users'].insert({'user_id': 2, 'name': 'Bob'})
+    db['orders'].insert({'order_id': 102, 'user_id': 2, 'amount': 149.99})
+```
+
+### Benefits
+
+- **Better Organization**: Each entity type in its own collection
+- **Improved Performance**: Smaller tables with focused indexes
+- **Complete Isolation**: No mixing of different document types
+- **Independent Indexes**: Each collection can have different indexed fields
+- **Type Safety**: Cleaner queries without type field filtering
+
+### ODM with Collections
+
+The ODM layer automatically uses collections:
+
+```python
+from dataclasses import dataclass
+from kenobix.odm import Document
+
+@dataclass
+class User(Document):
+    class Meta:
+        collection_name = "users"
+        indexed_fields = ["user_id", "email"]
+
+    user_id: int
+    name: str
+    email: str
+
+@dataclass
+class Order(Document):
+    class Meta:
+        collection_name = "orders"
+        indexed_fields = ["order_id", "user_id"]
+
+    order_id: int
+    user_id: int
+    amount: float
+
+# Each model uses its own collection
+user = User(user_id=1, name='Alice', email='alice@example.com')
+user.save()  # -> users collection
+
+order = Order(order_id=101, user_id=1, amount=99.99)
+order.save()  # -> orders collection
+```
+
+See [docs/collections.md](docs/collections.md) for complete documentation and `examples/collections_example.py` for real-world examples.
 
 ## When to Use KenobiX
 
