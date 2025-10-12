@@ -13,7 +13,6 @@ Each property is tested with multiple scenarios to ensure complete compliance.
 
 from __future__ import annotations
 
-import contextlib
 import multiprocessing
 import time
 from dataclasses import dataclass
@@ -519,6 +518,10 @@ class TestIsolation:
 
     def test_isolation_concurrent_transactions(self, db_path):
         """Multiple concurrent transactions should not interfere."""
+        # Setup: Create database first to avoid lock contention during initialization
+        db = KenobiX(str(db_path), indexed_fields=["worker_id", "counter"])
+        db.close()
+
         num_workers = 4
         iterations = 20
 
