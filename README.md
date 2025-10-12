@@ -1,8 +1,8 @@
 # KenobiX
 
-**High-Performance Document Database** • **15-665x Faster** • **SQLite3-Powered** • **Zero Dependencies**
+**High-Performance Minimal Document Database** • **SQLite3-Powered** • **Zero Dependencies**
 
-KenobiX is a document database with proper SQLite3 JSON optimization, delivering 15-53x faster searches and 80-665x faster updates compared to basic implementations.
+KenobiX is a document database with proper SQLite3 JSON optimization, delivering faster searches and faster updates compared to basic implementations.
 
 Based on [KenobiDB](https://github.com/patx/kenobi) by Harrison Erd, enhanced with generated column indexes and optimized concurrency. ("KenobiX" = "Kenobi + indeX").
 
@@ -374,7 +374,7 @@ Contributions welcome! Please:
 
 ## Links
 
-- **GitHub**: https://github.com/yourusername/kenobix
+- **GitHub**: https://github.com/abilian/kenobix
 - **Original KenobiDB**: https://github.com/patx/kenobi
 - **PyPI**: https://pypi.org/project/kenobix/
 - **Benchmarks**: See `benchmarks/` directory
@@ -383,7 +383,7 @@ Contributions welcome! Please:
 
 ### 0.5.0 (2025-10-11)
 - Initial KenobiX release based on KenobiDB 4.0
-- Added generated column indexes (15-665x performance improvement)
+- Added generated column indexes
 - Removed RLock from read operations for true concurrency
 - Added cursor-based pagination
 - Added query plan analysis (`explain()`)
