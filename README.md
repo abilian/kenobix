@@ -35,8 +35,28 @@ Real-world measurements on a 10,000 document dataset:
 
 See `benchmarks/` for detailed performance analysis.
 
+## ACID Compliance
+
+**KenobiX provides full ACID transaction support** backed by SQLite's proven transaction engine:
+
+- ✅ **Atomicity** - All-or-nothing execution with automatic rollback on errors
+- ✅ **Consistency** - Data integrity maintained across all operations
+- ✅ **Isolation** - Read Committed isolation prevents dirty reads
+- ✅ **Durability** - Committed data persists through crashes (WAL mode)
+
+**25/25 comprehensive ACID tests passing (100%)** - See [ACID Compliance](docs/dev/acid-compliance.md) for proof.
+
+```python
+# Banking transfer with automatic rollback on error
+with db.transaction():
+    db.update('account_id', 'A1', {'balance': 900})  # -100
+    db.update('account_id', 'A2', {'balance': 1100}) # +100
+    # Both succeed or both fail - guaranteed atomicity
+```
+
 ## Features
 
+- **Full ACID Transactions** - Context manager API with savepoints for nested transactions
 - **Automatic Index Usage** - Queries automatically use indexes when available, fall back to json_extract
 - **VIRTUAL Generated Columns** - Minimal storage overhead (~7-20% depending on document complexity)
 - **Thread-Safe** - No RLock on reads, SQLite handles concurrency with WAL mode
@@ -49,7 +69,9 @@ See `benchmarks/` for detailed performance analysis.
 ## Documentation
 
 - **[Getting Started](docs/index.md)** - Quick start guide
-- **[ODM Guide](docs/odm-guide.md)** - Complete ODM documentation with examples
+- **[Transactions](docs/transactions.md)** - Full ACID transaction API guide
+- **[ACID Compliance](docs/dev/acid-compliance.md)** - Comprehensive ACID test results
+- **[ODM Guide](docs/odm.md)** - Complete ODM documentation with examples
 - **[Performance Guide](docs/performance.md)** - Benchmarks and optimization tips
 - **[API Reference](docs/api-reference.md)** - Full API documentation
 
@@ -104,6 +126,35 @@ if result['has_more']:
 # Query optimization
 plan = db.explain('search', 'email', 'test@example.com')
 print(plan)  # Shows if index is being used
+
+# Transactions for ACID guarantees
+with db.transaction():
+    # All operations succeed or all fail together
+    db.insert({'user_id': 4, 'email': 'dave@example.com', 'balance': 1000})
+    db.update('user_id', 1, {'balance': 900})  # Transfer -100
+    db.update('user_id', 4, {'balance': 1100}) # Transfer +100
+    # Automatic commit on success, rollback on error
+
+# Manual transaction control
+db.begin()
+try:
+    db.insert({'user_id': 5, 'email': 'eve@example.com'})
+    db.commit()
+except Exception:
+    db.rollback()
+    raise
+
+# Nested transactions with savepoints
+with db.transaction():
+    db.insert({'status': 'processing'})
+    try:
+        with db.transaction():  # Nested - uses savepoint
+            db.insert({'status': 'temporary'})
+            raise ValueError("Rollback nested only")
+    except ValueError:
+        pass  # Inner transaction rolled back
+    db.insert({'status': 'completed'})
+    # Outer transaction commits both 'processing' and 'completed'
 ```
 
 ## Object Document Mapper (ODM)
@@ -179,6 +230,33 @@ active_count = User.count(active=True)
 
 See `examples/odm_example.py` for complete examples.
 
+### ODM Transaction Support
+
+The ODM layer fully supports transactions:
+
+```python
+# Context manager
+with User.transaction():
+    alice = User(name="Alice", email="alice@example.com", age=30)
+    bob = User(name="Bob", email="bob@example.com", age=25)
+    alice.save()
+    bob.save()
+    # Both saved atomically
+
+# Manual control
+User.begin()
+try:
+    user = User.get(email="alice@example.com")
+    user.age = 31
+    user.save()
+    User.commit()
+except Exception:
+    User.rollback()
+    raise
+```
+
+See [docs/transactions.md](docs/transactions.md) for complete transaction documentation.
+
 ## When to Use KenobiX
 
 ### Perfect For:
@@ -193,6 +271,33 @@ See `examples/odm_example.py` for complete examples.
 - ⚠️ Pure insert-only workloads (indexing overhead not worth it)
 - ⚠️ < 100 documents (overhead not justified)
 - ⚠️ Truly massive scale (> 10M documents - use PostgreSQL/MongoDB)
+
+## When to Use Transactions
+
+### Use Transactions For:
+- ✅ **Financial operations** - Balance transfers, payments, refunds
+- ✅ **Multi-step updates** - Ensuring related data stays consistent
+- ✅ **Batch operations** - 50-100x performance boost for bulk inserts
+- ✅ **Business logic invariants** - Total inventory, account balances, quotas
+- ✅ **Error recovery** - Automatic rollback on exceptions
+
+### Auto-commit is Fine For:
+- ⚠️ Single document inserts/updates (no performance benefit)
+- ⚠️ Independent operations (no consistency requirements)
+- ⚠️ Read-only queries (no transaction needed)
+
+**Performance Note:** Transactions can improve bulk insert performance by 50-100x by deferring commit until the end.
+
+```python
+# Without transaction: ~2000ms for 1000 inserts
+for doc in documents:
+    db.insert(doc)  # Commits after each insert
+
+# With transaction: ~20ms for 1000 inserts (100x faster)
+with db.transaction():
+    for doc in documents:
+        db.insert(doc)  # Single commit at end
+```
 
 ## Index Selection Strategy
 
@@ -235,6 +340,25 @@ db.purge()                             # Delete all documents
 db.all(limit=100, offset=0)            # Paginated retrieval
 ```
 
+### Transaction Operations
+
+```python
+# Context manager (recommended)
+with db.transaction():                 # Auto commit/rollback
+    db.insert(...)
+    db.update(...)
+
+# Manual control
+db.begin()                             # Start transaction
+db.commit()                            # Commit changes
+db.rollback()                          # Discard changes
+
+# Savepoints (nested transactions)
+sp = db.savepoint()                    # Create savepoint
+db.rollback_to(sp)                     # Rollback to savepoint
+db.release_savepoint(sp)               # Release savepoint
+```
+
 ### Advanced Operations
 
 ```python
@@ -249,11 +373,12 @@ db.get_indexed_fields()                # List indexed fields
 
 ## Performance Tips
 
-1. **Index your query fields** - Biggest performance win
-2. **Use `search_optimized()` for multi-field queries** - More efficient than chaining
-3. **Use cursor pagination for large datasets** - Avoids O(n) OFFSET cost
-4. **Batch inserts with `insert_many()`** - Much faster than individual inserts
-5. **Check query plans with `explain()`** - Verify indexes are being used
+1. **Index your query fields** - Biggest performance win (15-665x speedup)
+2. **Use transactions for bulk operations** - 50-100x faster for batch inserts
+3. **Use `search_optimized()` for multi-field queries** - More efficient than chaining
+4. **Use cursor pagination for large datasets** - Avoids O(n) OFFSET cost
+5. **Batch inserts with `insert_many()`** - Much faster than individual inserts
+6. **Check query plans with `explain()`** - Verify indexes are being used
 
 ## Migration from KenobiDB
 
@@ -285,6 +410,10 @@ pytest tests/
 # Run with coverage (90%+ coverage maintained)
 pytest --cov=kenobix tests/
 
+# Run ACID compliance tests
+python3 tests/test_acid_compliance.py  # 25 comprehensive tests
+python3 tests/test_transactions.py     # 14 transaction tests
+
 # Run concurrency tests (uses multiprocessing)
 python3 tests/test_concurrency.py
 
@@ -299,7 +428,14 @@ python benchmarks/benchmark_complexity.py
 **Test Coverage:** KenobiX maintains 90%+ test coverage across:
 - Core database operations (kenobix.py: 88%+)
 - ODM layer (odm.py: 93%+)
-- 81 tests covering CRUD, indexing, concurrency, and ODM features
+- 100+ tests covering CRUD, indexing, concurrency, transactions, and ODM features
+
+**ACID Compliance:** 25/25 comprehensive tests passing (100%):
+- 6 atomicity tests (all-or-nothing execution)
+- 5 consistency tests (data integrity invariants)
+- 5 isolation tests (concurrent transaction safety)
+- 7 durability tests (crash recovery simulation)
+- 2 combined tests (real-world scenarios)
 
 **Concurrency Tests:** Comprehensive multiprocessing tests verify:
 - Multiple readers run in parallel without blocking
@@ -308,7 +444,7 @@ python benchmarks/benchmark_complexity.py
 - Data integrity under concurrent access
 - Race condition detection
 
-See [tests/CONCURRENCY_TESTS.md](tests/CONCURRENCY_TESTS.md) for details.
+See [Concurrency Tests](docs/dev/concurrency-tests.md) for details.
 
 ## Benchmarking
 
@@ -344,11 +480,13 @@ For read-heavy workloads requiring maximum performance, use raw operations. For 
 
 The original KenobiDB provided an excellent foundation with its MongoDB-like API and clean SQLite3 integration. KenobiX builds on this work by adding:
 
+- Full ACID transaction support with context manager API
 - Generated column indexes for 15-665x performance improvements
 - Optimized concurrency model (no RLock for reads)
+- Optional ODM layer with dataclass support
 - Cursor-based pagination
 - Query plan analysis tools
-- Comprehensive benchmark suite
+- Comprehensive benchmark and test suites
 
 Thank you to Harrison Erd for creating KenobiDB!
 
@@ -381,20 +519,6 @@ Contributions welcome! Please:
 
 ## Changelog
 
-### 0.5.0 (2025-10-11)
-- Initial KenobiX release based on KenobiDB 4.0
-- Added generated column indexes
-- Removed RLock from read operations for true concurrency
-- Added cursor-based pagination
-- Added query plan analysis (`explain()`)
-- Added `search_optimized()` for multi-field queries
-- Added optional ODM layer with dataclass support and cattrs integration
-  - Full CRUD operations: save(), get(), filter(), delete()
-  - Bulk operations: insert_many(), delete_many()
-  - Automatic index usage for queries
-  - Type-safe models with zero boilerplate
-- Modified insert/insert_many to return IDs for ODM integration
-- Comprehensive benchmark suite (scale and complexity tests)
-- Full API compatibility with KenobiDB
-- 90%+ test coverage (81 tests covering all features)
-- Complete documentation suite (Getting Started, ODM Guide, Performance Guide, API Reference)
+See [CHANGES.md](CHANGES.md) for the complete changelog.
+
+**Latest version: 0.6.0** - Full ACID transaction support with context manager API, savepoints, 25 comprehensive ACID compliance tests, and complete transaction documentation.

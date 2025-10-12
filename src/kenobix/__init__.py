@@ -22,4 +22,3 @@ except ImportError:
     # cattrs not installed, ODM not available
     __all__ = ("KenobiX",)
 
-__version__ = "5.0.0"
