@@ -18,16 +18,9 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import pathlib
-import sys
 import tempfile
 import time
-
-# Add src to path for imports
-sys.path.insert(0, os.path.join(pathlib.Path(__file__).parent, "..", "src"))
-
-import pathlib
 
 from kenobix import KenobiX
 

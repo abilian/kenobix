@@ -22,9 +22,6 @@ import tempfile
 import time
 from dataclasses import dataclass
 
-# Add src to path for imports
-sys.path.insert(0, os.path.join(pathlib.Path(__file__).parent, "..", "src"))
-
 from kenobix import Document, KenobiX
 
 

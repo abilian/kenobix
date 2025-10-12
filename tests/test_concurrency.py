@@ -19,13 +19,7 @@ import tempfile
 import time
 from pathlib import Path
 
-# Add parent directory to path for direct execution
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
-try:
-    import pytest
-except ImportError:
-    pytest = None  # Allow running without pytest
+import pytest
 
 from kenobix import KenobiX
 

@@ -319,7 +319,8 @@ class TestCollectionTransactions:
                 with db.transaction():
                     users.insert({"user_id": 1, "name": "Alice"})
                     orders.insert({"order_id": 101, "user_id": 1})
-                    raise ValueError("Simulated error")
+                    msg = "Simulated error"
+                    raise ValueError(msg)
             except ValueError:
                 pass
 
@@ -351,7 +352,8 @@ class TestCollectionTransactions:
             try:
                 with db.transaction():
                     db.insert({"user_id": 3, "name": "Carol"})
-                    raise ValueError("Rollback")
+                    msg = "Rollback"
+                    raise ValueError(msg)
             except ValueError:
                 pass
 

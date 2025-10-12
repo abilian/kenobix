@@ -14,14 +14,9 @@ Usage:
 from __future__ import annotations
 
 import multiprocessing
-import os
-import sys
 import tempfile
 import time
 from pathlib import Path
-
-# Add src to path
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from kenobix import KenobiX
 

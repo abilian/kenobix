@@ -15,11 +15,9 @@ from __future__ import annotations
 
 import sys
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
-
-# Add parent directory to path for direct execution
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from kenobix import KenobiX
 
@@ -81,7 +79,8 @@ def example_banking_transfer():
             with db.transaction():
                 alice = db.search("account_id", "A1")[0]
                 if alice["balance"] < 2000:
-                    raise ValueError("Insufficient funds")
+                    msg = "Insufficient funds"
+                    raise ValueError(msg)
                 db.update("account_id", "A1", {"balance": alice["balance"] - 2000})
                 bob = db.search("account_id", "A2")[0]
                 db.update("account_id", "A2", {"balance": bob["balance"] + 2000})
@@ -194,7 +193,8 @@ def example_savepoints():
             required = 10  # Required amount
 
             if inventory < required:
-                raise ValueError("Insufficient inventory")
+                msg = "Insufficient inventory"
+                raise ValueError(msg)
 
             db.insert({"type": "inventory", "item": "widget", "reserved": required})
             print("  Step 2: Inventory reserved")
@@ -247,7 +247,8 @@ def example_nested_transactions():
                 with db.transaction():
                     db.insert({"name": "Bob", "action": "inner"})
                     print("  Inner: Inserted Bob")
-                    raise ValueError("Simulated inner error")
+                    msg = "Simulated inner error"
+                    raise ValueError(msg)
             except ValueError as e:
                 print(f"  Inner transaction rolled back: {e}")
 
@@ -355,8 +356,6 @@ def example_transaction_performance():
         db_path = tmp.name
 
     try:
-        import time
-
         db = KenobiX(db_path, indexed_fields=["batch_id"])
 
         # Generate test data

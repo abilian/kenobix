@@ -38,12 +38,16 @@ Example:
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import fields, is_dataclass
-from typing import Any, ClassVar, Self, TypeVar
+from typing import TYPE_CHECKING, Any, ClassVar, Self, TypeVar
 
 import cattrs
 
 from .kenobix import KenobiX  # noqa: TC001 - Used at runtime for db._connection, etc.
+
+if TYPE_CHECKING:
+    from .collection import Collection
 
 T = TypeVar("T", bound="Document")
 
@@ -60,24 +64,100 @@ class Document:
         _converter: cattrs converter instance (class variable)
 
     Class Variables:
-        _indexed_fields: Set via Meta class
-        _primary_key: Primary key field name (default: '_id')
+        _collection_name: Collection name (auto-derived from class name or from Meta)
+        _indexed_fields: Fields to index (from Meta.indexed_fields)
+
+    Example with Meta:
+        @dataclass
+        class User(Document):
+            class Meta:
+                collection_name = "users"  # Optional, defaults to "users"
+                indexed_fields = ["email", "user_id"]
+
+            name: str
+            email: str
 
     Note:
         _id is NOT a dataclass field to avoid conflicts with subclass fields.
         It's stored in __dict__ and accessed via property.
     """
 
-    # Class-level database connection
+    # Class-level database connection (shared across all models)
     _db: ClassVar[KenobiX | None] = None
     _converter: ClassVar[Any] = None
+
+    # Per-class configuration (set via __init_subclass__)
+    _collection_name: ClassVar[str] = "documents"  # Default for backward compatibility
+    _indexed_fields_list: ClassVar[list[str]] = []  # From Meta.indexed_fields
 
     # Configuration via inner Meta class
     class Meta:
         """Override in subclasses to configure ODM behavior."""
 
+        collection_name: str | None = None  # If None, auto-derived from class name
         indexed_fields: list[str] = []
-        table_name: str | None = None  # Future: support multiple tables
+
+    def __init_subclass__(cls, **kwargs):
+        """
+        Called when a subclass is created. Process Meta class configuration.
+
+        This method extracts configuration from the subclass's Meta class
+        and sets up collection name and indexed fields.
+        """
+        super().__init_subclass__(**kwargs)
+
+        # Process Meta class if present
+        if hasattr(cls, "Meta"):
+            meta = cls.Meta
+            # Get collection name from Meta or derive from class name
+            if hasattr(meta, "collection_name") and meta.collection_name:
+                cls._collection_name = meta.collection_name
+            else:
+                # Auto-derive: User → users, Order → orders
+                cls._collection_name = cls._pluralize(cls.__name__)
+
+            # Get indexed fields from Meta
+            if hasattr(meta, "indexed_fields"):
+                cls._indexed_fields_list = list(meta.indexed_fields)
+            else:
+                cls._indexed_fields_list = []
+        else:
+            # No Meta class: use defaults
+            # Base Document class uses "documents" for backward compatibility
+            # Subclasses without Meta get auto-derived names
+            if cls.__name__ != "Document":
+                cls._collection_name = cls._pluralize(cls.__name__)
+                cls._indexed_fields_list = []
+
+    @staticmethod
+    def _pluralize(word: str) -> str:
+        """
+        Convert singular class name to plural collection name.
+
+        Examples:
+            User → users
+            Order → orders
+            Category → categories
+            Address → addresses
+            Person → persons (simple rules, not perfect English)
+
+        Args:
+            word: Singular word (class name)
+
+        Returns:
+            Plural form
+        """
+        word_lower = word.lower()
+
+        # Special cases
+        if word_lower.endswith("y"):
+            # Category → categories
+            return word_lower[:-1] + "ies"
+        if word_lower.endswith(("s", "x", "z", "ch", "sh")):
+            # Address → addresses, Box → boxes
+            return word_lower + "es"
+        # User → users, Order → orders
+        return word_lower + "s"
 
     def __init__(self, **kwargs):
         """
@@ -118,6 +198,27 @@ class Document:
             msg = "Database not initialized. Call Document.set_database(db) first."
             raise RuntimeError(msg)
         return cls._db
+
+    @classmethod
+    def _get_collection(cls) -> Collection:
+        """
+        Get the collection for this model class.
+
+        Each model class gets its own collection based on _collection_name.
+        The collection is created with indexed fields from Meta.indexed_fields.
+
+        Returns:
+            Collection instance for this model
+
+        Example:
+            User._get_collection()  # Returns "users" collection
+            Order._get_collection()  # Returns "orders" collection
+        """
+        db = cls._get_db()
+        # Get or create collection with this model's indexed fields
+        return db.collection(
+            cls._collection_name, indexed_fields=cls._indexed_fields_list
+        )
 
     @classmethod
     def transaction(cls):
@@ -204,18 +305,19 @@ class Document:
         Returns:
             Self with _id set after insert
         """
-        db = self._get_db()
+        collection = self._get_collection()
         data = self._to_dict()
 
         if self._id is None:
             # Insert new document
-            self._id = db.insert(data)
+            self._id = collection.insert(data)
         else:
             # Update existing document by database row ID
             # We need to update directly using the rowid, not a field search
+            db = self._get_db()
             with db._write_lock:
                 db._connection.execute(
-                    "UPDATE documents SET data = ? WHERE id = ?",
+                    f"UPDATE {collection.name} SET data = ? WHERE id = ?",
                     (json.dumps(data), self._id),
                 )
                 db._maybe_commit()
@@ -250,11 +352,12 @@ class Document:
         Returns:
             Instance or None
         """
+        collection = cls._get_collection()
         db = cls._get_db()
 
         # Query by rowid directly
         cursor = db._connection.execute(
-            "SELECT id, data FROM documents WHERE id = ?", (doc_id,)
+            f"SELECT id, data FROM {collection.name} WHERE id = ?", (doc_id,)
         )
         row = cursor.fetchone()
 
@@ -279,21 +382,25 @@ class Document:
         Example:
             users = User.filter(age=30, active=True)
         """
+        collection = cls._get_collection()
         db = cls._get_db()
 
         if not filters:
             # Get all documents
             cursor = db._connection.execute(
-                "SELECT id, data FROM documents LIMIT ? OFFSET ?", (limit, offset)
+                f"SELECT id, data FROM {collection.name} LIMIT ? OFFSET ?",
+                (limit, offset),
             )
         else:
-            # Use search_optimized if available
             # Build query manually to get both id and data
             where_parts: list[str] = []
             params: list[Any] = []
 
+            # Use collection's indexed fields
+            indexed_fields = collection.get_indexed_fields()
+
             for key, value in filters.items():
-                if key in db._indexed_fields:
+                if key in indexed_fields:
                     safe_field = db._sanitize_field_name(key)
                     where_parts.append(f"{safe_field} = ?")
                 else:
@@ -301,9 +408,7 @@ class Document:
                 params.append(value)
 
             where_clause = " AND ".join(where_parts)
-            query = (
-                f"SELECT id, data FROM documents WHERE {where_clause} LIMIT ? OFFSET ?"
-            )
+            query = f"SELECT id, data FROM {collection.name} WHERE {where_clause} LIMIT ? OFFSET ?"
             params.extend([limit, offset])
 
             cursor = db._connection.execute(query, params)
@@ -346,11 +451,12 @@ class Document:
             msg = "Cannot delete unsaved document"
             raise RuntimeError(msg)
 
+        collection = self._get_collection()
         db = self._get_db()
 
         with db._write_lock:
             cursor = db._connection.execute(
-                "DELETE FROM documents WHERE id = ?", (self._id,)
+                f"DELETE FROM {collection.name} WHERE id = ?", (self._id,)
             )
             db._maybe_commit()
 
@@ -370,6 +476,7 @@ class Document:
         Example:
             deleted = User.delete_many(active=False)
         """
+        collection = cls._get_collection()
         db = cls._get_db()
 
         if not filters:
@@ -380,8 +487,11 @@ class Document:
         where_parts: list[str] = []
         params: list[Any] = []
 
+        # Use collection's indexed fields
+        indexed_fields = collection.get_indexed_fields()
+
         for key, value in filters.items():
-            if key in db._indexed_fields:
+            if key in indexed_fields:
                 safe_field = db._sanitize_field_name(key)
                 where_parts.append(f"{safe_field} = ?")
             else:
@@ -392,7 +502,7 @@ class Document:
 
         with db._write_lock:
             cursor = db._connection.execute(
-                f"DELETE FROM documents WHERE {where_clause}", params
+                f"DELETE FROM {collection.name} WHERE {where_clause}", params
             )
             db._maybe_commit()
 
@@ -419,13 +529,13 @@ class Document:
         if not instances:
             return []
 
-        db = cls._get_db()
+        collection = cls._get_collection()
 
         # Convert instances to dicts
         documents = [inst._to_dict() for inst in instances]
 
         # Insert and get IDs
-        ids = db.insert_many(documents)
+        ids = collection.insert_many(documents)
 
         # Update instances with IDs
         for inst, doc_id in zip(instances, ids, strict=False):
@@ -447,16 +557,20 @@ class Document:
         Example:
             active_users = User.count(active=True)
         """
+        collection = cls._get_collection()
         db = cls._get_db()
 
         if not filters:
-            cursor = db._connection.execute("SELECT COUNT(*) FROM documents")
+            cursor = db._connection.execute(f"SELECT COUNT(*) FROM {collection.name}")
         else:
             where_parts: list[str] = []
             params: list[Any] = []
 
+            # Use collection's indexed fields
+            indexed_fields = collection.get_indexed_fields()
+
             for key, value in filters.items():
-                if key in db._indexed_fields:
+                if key in indexed_fields:
                     safe_field = db._sanitize_field_name(key)
                     where_parts.append(f"{safe_field} = ?")
                 else:
@@ -465,7 +579,7 @@ class Document:
 
             where_clause = " AND ".join(where_parts)
             cursor = db._connection.execute(
-                f"SELECT COUNT(*) FROM documents WHERE {where_clause}", params
+                f"SELECT COUNT(*) FROM {collection.name} WHERE {where_clause}", params
             )
 
         return cursor.fetchone()[0]
