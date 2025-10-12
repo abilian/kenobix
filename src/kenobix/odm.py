@@ -119,6 +119,41 @@ class Document:
             raise RuntimeError(msg)
         return cls._db
 
+    @classmethod
+    def transaction(cls):
+        """
+        Get transaction context manager from database.
+
+        Example:
+            with User.transaction():
+                user1.save()
+                user2.save()
+                # Both committed together
+
+        Returns:
+            Transaction context manager
+        """
+        db = cls._get_db()
+        return db.transaction()
+
+    @classmethod
+    def begin(cls):
+        """Begin a transaction. Delegate to database."""
+        db = cls._get_db()
+        db.begin()
+
+    @classmethod
+    def commit(cls):
+        """Commit current transaction. Delegate to database."""
+        db = cls._get_db()
+        db.commit()
+
+    @classmethod
+    def rollback(cls):
+        """Rollback current transaction. Delegate to database."""
+        db = cls._get_db()
+        db.rollback()
+
     def _to_dict(self) -> dict[str, Any]:
         """
         Convert dataclass instance to dict for storage.
@@ -183,7 +218,7 @@ class Document:
                     "UPDATE documents SET data = ? WHERE id = ?",
                     (json.dumps(data), self._id),
                 )
-                db._connection.commit()
+                db._maybe_commit()
 
         return self
 
@@ -317,7 +352,7 @@ class Document:
             cursor = db._connection.execute(
                 "DELETE FROM documents WHERE id = ?", (self._id,)
             )
-            db._connection.commit()
+            db._maybe_commit()
 
         return cursor.rowcount > 0
 
@@ -359,7 +394,7 @@ class Document:
             cursor = db._connection.execute(
                 f"DELETE FROM documents WHERE {where_clause}", params
             )
-            db._connection.commit()
+            db._maybe_commit()
 
         return cursor.rowcount
 

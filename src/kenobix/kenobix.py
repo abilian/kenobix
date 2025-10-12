@@ -21,6 +21,7 @@ Licensed under BSD-3-Clause
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 import sqlite3
@@ -65,6 +66,10 @@ class KenobiX:
         self._connection = sqlite3.connect(self.file, check_same_thread=False)
         self._indexed_fields: set[str] = set(indexed_fields or [])
         self.executor = ThreadPoolExecutor(max_workers=5)
+
+        # Transaction state
+        self._in_transaction = False
+        self._savepoint_counter = 0
 
         self._add_regexp_support(self._connection)
         self._initialize_db()
@@ -156,7 +161,7 @@ class KenobiX:
                 self._connection.execute(
                     f"CREATE INDEX idx_{safe_field} ON documents({safe_field})"
                 )
-                self._connection.commit()
+                self._maybe_commit()
                 return True
             except sqlite3.OperationalError:
                 # Column already exists or can't be added
@@ -183,7 +188,7 @@ class KenobiX:
             cursor = self._connection.execute(
                 "INSERT INTO documents (data) VALUES (?)", (json.dumps(document),)
             )
-            self._connection.commit()
+            self._maybe_commit()
             # SQLite always returns lastrowid after INSERT
             assert cursor.lastrowid is not None
             return cursor.lastrowid
@@ -215,7 +220,7 @@ class KenobiX:
                 "INSERT INTO documents (data) VALUES (?)",
                 [(json.dumps(doc),) for doc in document_list],
             )
-            self._connection.commit()
+            self._maybe_commit()
 
             # Return the range of IDs that were inserted
             return list(range(last_id + 1, last_id + 1 + len(document_list)))
@@ -249,7 +254,7 @@ class KenobiX:
             else:
                 query = "DELETE FROM documents WHERE json_extract(data, '$.' || ?) = ?"
                 result = self._connection.execute(query, (key, value))
-            self._connection.commit()
+            self._maybe_commit()
             return result.rowcount
 
     def update(self, id_key: str, id_value: Any, new_dict: dict[str, Any]) -> bool:
@@ -310,7 +315,7 @@ class KenobiX:
                         update_query, (json.dumps(document), id_key, id_value)
                     )
 
-            self._connection.commit()
+            self._maybe_commit()
             return True
 
     def purge(self) -> bool:
@@ -322,7 +327,7 @@ class KenobiX:
         """
         with self._write_lock:
             self._connection.execute("DELETE FROM documents")
-            self._connection.commit()
+            self._maybe_commit()
             return True
 
     def search(
@@ -631,8 +636,215 @@ class KenobiX:
             "wal_mode": True,
         }
 
+    def _maybe_commit(self):
+        """Commit if not in a transaction."""
+        if not self._in_transaction:
+            self._connection.commit()
+
+    def begin(self):
+        """
+        Begin a new transaction.
+
+        Allows multiple operations to be grouped atomically.
+        All operations after begin() will not be committed until commit() is called.
+
+        Example:
+            db.begin()
+            try:
+                db.insert({"user": "Alice"})
+                db.insert({"user": "Bob"})
+                db.commit()  # Both succeed or both fail
+            except:
+                db.rollback()
+
+        Raises:
+            RuntimeError: If already in a transaction
+        """
+        if self._in_transaction:
+            msg = "Already in a transaction. Use savepoint() for nested transactions."
+            raise RuntimeError(msg)
+
+        with self._write_lock:
+            self._connection.execute("BEGIN")
+            self._in_transaction = True
+
+    def commit(self):
+        """
+        Commit the current transaction.
+
+        Makes all changes since begin() permanent.
+
+        Raises:
+            RuntimeError: If not in a transaction
+        """
+        if not self._in_transaction:
+            msg = "Not in a transaction"
+            raise RuntimeError(msg)
+
+        with self._write_lock:
+            self._connection.commit()
+            self._in_transaction = False
+            self._savepoint_counter = 0
+
+    def rollback(self):
+        """
+        Rollback the current transaction.
+
+        Discards all changes since begin().
+
+        Raises:
+            RuntimeError: If not in a transaction
+        """
+        if not self._in_transaction:
+            msg = "Not in a transaction"
+            raise RuntimeError(msg)
+
+        with self._write_lock:
+            self._connection.rollback()
+            self._in_transaction = False
+            self._savepoint_counter = 0
+
+    def savepoint(self, name: str | None = None) -> str:
+        """
+        Create a savepoint within a transaction.
+
+        Savepoints allow partial rollback within a transaction.
+
+        Args:
+            name: Optional savepoint name (auto-generated if not provided)
+
+        Returns:
+            Savepoint name
+
+        Example:
+            db.begin()
+            db.insert({"user": "Alice"})
+            sp = db.savepoint()
+            db.insert({"user": "Bob"})
+            db.rollback_to(sp)  # Rolls back Bob, keeps Alice
+            db.commit()
+
+        Raises:
+            RuntimeError: If not in a transaction
+        """
+        if not self._in_transaction:
+            msg = "Must be in a transaction to create savepoint"
+            raise RuntimeError(msg)
+
+        if name is None:
+            self._savepoint_counter += 1
+            name = f"sp_{self._savepoint_counter}"
+
+        with self._write_lock:
+            self._connection.execute(f"SAVEPOINT {name}")
+
+        return name
+
+    def rollback_to(self, savepoint: str):
+        """
+        Rollback to a specific savepoint.
+
+        Args:
+            savepoint: Savepoint name (from savepoint() method)
+
+        Raises:
+            RuntimeError: If not in a transaction
+        """
+        if not self._in_transaction:
+            msg = "Not in a transaction"
+            raise RuntimeError(msg)
+
+        with self._write_lock:
+            self._connection.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+
+    def release_savepoint(self, savepoint: str):
+        """
+        Release a savepoint (commit it within the transaction).
+
+        Args:
+            savepoint: Savepoint name
+
+        Raises:
+            RuntimeError: If not in a transaction
+        """
+        if not self._in_transaction:
+            msg = "Not in a transaction"
+            raise RuntimeError(msg)
+
+        with self._write_lock:
+            self._connection.execute(f"RELEASE SAVEPOINT {savepoint}")
+
+    def transaction(self):
+        """
+        Context manager for transactions.
+
+        Automatically begins transaction on enter and commits on exit.
+        Rolls back on exception.
+
+        Example:
+            with db.transaction():
+                db.insert({"user": "Alice"})
+                db.insert({"user": "Bob"})
+                # Both committed together
+
+        Returns:
+            Transaction context manager
+        """
+        return Transaction(self)
+
     def close(self):
         """Shutdown executor and close connection."""
         self.executor.shutdown()
         with self._write_lock:
             self._connection.close()
+
+
+class Transaction:
+    """
+    Context manager for database transactions.
+
+    Provides automatic transaction management with commit/rollback.
+    """
+
+    def __init__(self, db: KenobiX):
+        """
+        Initialize transaction context manager.
+
+        Args:
+            db: KenobiX database instance
+        """
+        self.db = db
+        self._savepoint: str | None = None
+
+    def __enter__(self):
+        """Begin transaction or create savepoint if nested."""
+        if self.db._in_transaction:
+            # Nested transaction - use savepoint
+            self._savepoint = self.db.savepoint()
+        else:
+            # Top-level transaction
+            self.db.begin()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Commit on success, rollback on exception."""
+        try:
+            if exc_type is not None:
+                # Exception occurred - rollback
+                if self._savepoint:
+                    self.db.rollback_to(self._savepoint)
+                else:
+                    self.db.rollback()
+                return False  # Re-raise exception
+            # Success - commit
+            if self._savepoint:
+                self.db.release_savepoint(self._savepoint)
+            else:
+                self.db.commit()
+            return True
+        except sqlite3.Error:
+            # Error during commit/rollback - ensure we rollback
+            if not self._savepoint and self.db._in_transaction:
+                with contextlib.suppress(sqlite3.Error):
+                    self.db.rollback()
+            raise

@@ -529,7 +529,7 @@ for doc in results:
 
 ## Conclusion
 
-KenobiX delivers **15-665x performance improvements** over basic document stores through:
+On these examples, KenobiX delivers **15-665x performance improvements** over basic document stores through:
 - Smart indexing with generated columns
 - Lock-free concurrent reads
 - Efficient VIRTUAL columns (minimal overhead)

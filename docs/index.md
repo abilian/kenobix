@@ -7,7 +7,7 @@ Welcome to the KenobiX documentation. KenobiX is a high-performance document dat
 ## Quick Links
 
 - **[Getting Started](#getting-started)** - Installation and first steps
-- **[ODM Guide](odm-guide.md)** - Object Document Mapper with dataclasses
+- **[ODM Guide](odm.md)** - Object Document Mapper with dataclasses
 - **[Performance Guide](performance.md)** - Optimization and benchmarks
 - **[API Reference](api-reference.md)** - Complete API documentation
 
