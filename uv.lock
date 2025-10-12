@@ -205,7 +205,7 @@ wheels = [
 
 [[package]]
 name = "kenobix"
-version = "0.5.1"
+version = "0.7.0"
 source = { editable = "." }
 dependencies = [
     { name = "cattrs" },
