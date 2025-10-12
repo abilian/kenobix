@@ -474,9 +474,7 @@ def main():
         print("  4. Transactions can provide 50-100x performance boost for bulk ops")
         print("  5. ODM layer fully supports transactions")
         print("  6. Manual control available for complex workflows")
-        print(
-            "\nSee docs/transactions.md for complete API documentation"
-        )
+        print("\nSee docs/transactions.md for complete API documentation")
 
     except Exception as e:
         print(f"\n❌ Error running examples: {e}")

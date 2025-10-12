@@ -87,7 +87,7 @@ def concurrent_transaction_worker(
                 # Small delay to increase chance of conflicts
                 time.sleep(0.001)
                 success_count += 1
-        except Exception:  # noqa: BLE001, S110, PERF203
+        except Exception:  # noqa: BLE001, S110
             pass  # Transaction failed, that's okay - testing concurrency
 
     db.close()
@@ -114,7 +114,7 @@ def balance_transfer_worker(db_path: str, worker_id: int, iterations: int) -> di
                     db.update("account_id", "A", {"balance": account_a["balance"]})
                     db.update("account_id", "B", {"balance": account_b["balance"]})
                     transfers_completed += 1
-        except Exception:  # noqa: BLE001, S110, PERF203
+        except Exception:  # noqa: BLE001, S110
             pass  # Transaction may fail due to concurrency - that's expected
 
     db.close()

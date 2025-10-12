@@ -21,4 +21,3 @@ try:
 except ImportError:
     # cattrs not installed, ODM not available
     __all__ = ("KenobiX",)
-
