@@ -285,6 +285,12 @@ pytest tests/
 # Run with coverage (90%+ coverage maintained)
 pytest --cov=kenobix tests/
 
+# Run concurrency tests (uses multiprocessing)
+python3 tests/test_concurrency.py
+
+# Quick concurrency check
+python3 scripts/check_concurrency.py
+
 # Run benchmarks
 python benchmarks/benchmark_scale.py
 python benchmarks/benchmark_complexity.py
@@ -294,6 +300,15 @@ python benchmarks/benchmark_complexity.py
 - Core database operations (kenobix.py: 88%+)
 - ODM layer (odm.py: 93%+)
 - 81 tests covering CRUD, indexing, concurrency, and ODM features
+
+**Concurrency Tests:** Comprehensive multiprocessing tests verify:
+- Multiple readers run in parallel without blocking
+- Writers properly serialize via write lock
+- Readers not blocked by writers (WAL mode benefit)
+- Data integrity under concurrent access
+- Race condition detection
+
+See [tests/CONCURRENCY_TESTS.md](tests/CONCURRENCY_TESTS.md) for details.
 
 ## Benchmarking
 
@@ -342,6 +357,7 @@ Thank you to Harrison Erd for creating KenobiDB!
 BSD-3-Clause License (same as original KenobiDB)
 
 Copyright (c) 2025 KenobiX Contributors
+
 Original KenobiDB Copyright (c) Harrison Erd
 
 See LICENSE file for details.
@@ -365,7 +381,7 @@ Contributions welcome! Please:
 
 ## Changelog
 
-### 5.0.0 (2025-01-15)
+### 0.5.0 (2025-10-11)
 - Initial KenobiX release based on KenobiDB 4.0
 - Added generated column indexes (15-665x performance improvement)
 - Removed RLock from read operations for true concurrency
@@ -382,7 +398,3 @@ Contributions welcome! Please:
 - Full API compatibility with KenobiDB
 - 90%+ test coverage (81 tests covering all features)
 - Complete documentation suite (Getting Started, ODM Guide, Performance Guide, API Reference)
-
----
-
-**Made with ⚡ by improving on the excellent work of Harrison Erd**
