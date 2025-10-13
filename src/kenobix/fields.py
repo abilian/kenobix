@@ -481,3 +481,424 @@ class RelatedSet(Generic[T]):
 
         msg = "Cannot directly assign to RelatedSet. Use add() or remove() methods."
         raise AttributeError(msg)
+
+
+class ManyToManyManager(Generic[T]):
+    """
+    Manager for many-to-many relationships.
+
+    Provides methods to query and manage related objects through a junction table.
+
+    Attributes:
+        instance: Parent document instance
+        related_model: Related model class
+        through: Junction table name
+        local_field: Field in parent model
+        remote_field: Field in related model
+        local_junction_field: Field in junction table for parent side
+        remote_junction_field: Field in junction table for related side
+    """
+
+    def __init__(
+        self,
+        instance: Document,
+        related_model: type[T],
+        through: str,
+        local_field: str,
+        remote_field: str,
+        local_junction_field: str,
+        remote_junction_field: str,
+    ):
+        """
+        Initialize ManyToManyManager.
+
+        Args:
+            instance: Parent document instance
+            related_model: Related model class
+            through: Junction table name
+            local_field: Field in parent model (e.g., "student_id")
+            remote_field: Field in related model (e.g., "course_id")
+            local_junction_field: Field in junction table for parent side
+            remote_junction_field: Field in junction table for related side
+        """
+        self.instance = instance
+        self.related_model = related_model
+        self.through = through
+        self.local_field = local_field
+        self.remote_field = remote_field
+        self.local_junction_field = local_junction_field
+        self.remote_junction_field = remote_junction_field
+        self._ensure_junction_table()
+
+    def _ensure_junction_table(self) -> None:
+        """Ensure junction table exists."""
+        # Get database from instance's class
+        db = self.instance._get_db()
+
+        # Check if table exists by trying to query it
+        try:
+            cursor = db._connection.cursor()
+            cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                (self.through,),
+            )
+            result = cursor.fetchone()
+
+            if result is None:
+                # Table doesn't exist, create it
+                cursor.execute(
+                    f"""
+                    CREATE TABLE {self.through} (
+                        {self.local_junction_field} NOT NULL,
+                        {self.remote_junction_field} NOT NULL,
+                        PRIMARY KEY ({self.local_junction_field}, {self.remote_junction_field})
+                    )
+                    """
+                )
+                # Create indexes for performance
+                cursor.execute(
+                    f"CREATE INDEX idx_{self.through}_{self.local_junction_field} "
+                    f"ON {self.through}({self.local_junction_field})"
+                )
+                cursor.execute(
+                    f"CREATE INDEX idx_{self.through}_{self.remote_junction_field} "
+                    f"ON {self.through}({self.remote_junction_field})"
+                )
+                db._connection.commit()
+        finally:
+            cursor.close()
+
+    def all(self, limit: int = 100) -> list[T]:
+        """
+        Get all related objects.
+
+        Args:
+            limit: Maximum number of objects to return
+
+        Returns:
+            List of related objects
+        """
+        # Get local value (e.g., student_id = 1)
+        local_value = getattr(self.instance, self.local_field)
+        if local_value is None:
+            return []
+
+        # Query junction table for remote IDs
+        db = self.instance._get_db()
+        cursor = db._connection.cursor()
+        cursor.execute(
+            f"SELECT {self.remote_junction_field} FROM {self.through} "
+            f"WHERE {self.local_junction_field} = ? LIMIT ?",
+            (local_value, limit),
+        )
+        remote_ids = [row[0] for row in cursor.fetchall()]
+        cursor.close()
+
+        if not remote_ids:
+            return []
+
+        # Load related objects by remote field
+        results = []
+        for remote_id in remote_ids:
+            obj = self.related_model.get(**{self.remote_field: remote_id})
+            if obj is not None:
+                results.append(obj)
+
+        return results
+
+    def filter(self, limit: int = 100, **filters) -> list[T]:
+        """
+        Filter related objects by additional criteria.
+
+        Args:
+            limit: Maximum number of objects to return
+            **filters: Additional filter criteria
+
+        Returns:
+            List of filtered related objects
+        """
+        # Get all related objects first
+        all_related = self.all(limit=limit)
+
+        # Filter by additional criteria
+        results = []
+        for obj in all_related:
+            match = True
+            for key, value in filters.items():
+                if getattr(obj, key, None) != value:
+                    match = False
+                    break
+            if match:
+                results.append(obj)
+
+        return results
+
+    def count(self) -> int:
+        """
+        Count related objects.
+
+        Returns:
+            Number of related objects
+        """
+        local_value = getattr(self.instance, self.local_field)
+        if local_value is None:
+            return 0
+
+        db = self.instance._get_db()
+        cursor = db._connection.cursor()
+        cursor.execute(
+            f"SELECT COUNT(*) FROM {self.through} WHERE {self.local_junction_field} = ?",
+            (local_value,),
+        )
+        count = cursor.fetchone()[0]
+        cursor.close()
+
+        return count
+
+    def add(self, obj: T) -> None:
+        """
+        Add a relationship to the related object.
+
+        Inserts a record into the junction table.
+
+        Args:
+            obj: Related object to add
+        """
+        local_value = getattr(self.instance, self.local_field)
+        remote_value = getattr(obj, self.remote_field)
+
+        if local_value is None or remote_value is None:
+            msg = "Cannot create relationship with None values"
+            raise ValueError(msg)
+
+        # Insert into junction table (ignore if already exists)
+        db = self.instance._get_db()
+        cursor = db._connection.cursor()
+        try:
+            cursor.execute(
+                f"INSERT OR IGNORE INTO {self.through} "
+                f"({self.local_junction_field}, {self.remote_junction_field}) "
+                f"VALUES (?, ?)",
+                (local_value, remote_value),
+            )
+            db._maybe_commit()
+        finally:
+            cursor.close()
+
+    def remove(self, obj: T) -> None:
+        """
+        Remove a relationship to the related object.
+
+        Deletes the record from the junction table.
+
+        Args:
+            obj: Related object to remove
+        """
+        local_value = getattr(self.instance, self.local_field)
+        remote_value = getattr(obj, self.remote_field)
+
+        if local_value is None or remote_value is None:
+            return
+
+        # Delete from junction table
+        db = self.instance._get_db()
+        cursor = db._connection.cursor()
+        try:
+            cursor.execute(
+                f"DELETE FROM {self.through} "
+                f"WHERE {self.local_junction_field} = ? AND {self.remote_junction_field} = ?",
+                (local_value, remote_value),
+            )
+            db._maybe_commit()
+        finally:
+            cursor.close()
+
+    def clear(self) -> None:
+        """Remove all relationships."""
+        local_value = getattr(self.instance, self.local_field)
+        if local_value is None:
+            return
+
+        # Delete all entries for this instance
+        db = self.instance._get_db()
+        cursor = db._connection.cursor()
+        try:
+            cursor.execute(
+                f"DELETE FROM {self.through} WHERE {self.local_junction_field} = ?",
+                (local_value,),
+            )
+            db._maybe_commit()
+        finally:
+            cursor.close()
+
+    def __iter__(self):
+        """Iterate over related objects."""
+        return iter(self.all())
+
+    def __len__(self) -> int:
+        """Get count of related objects."""
+        return self.count()
+
+
+class ManyToMany(Generic[T]):
+    """
+    Descriptor for many-to-many relationships.
+
+    Manages relationships through a junction table,
+    allowing many instances of one model to be related to many instances of another.
+
+    Attributes:
+        related_model: Related model class
+        through: Junction table name
+        local_field: Field in parent model
+        remote_field: Field in related model
+        local_junction_field: Field name in junction table for parent side
+        remote_junction_field: Field name in junction table for related side
+
+    Example:
+        @dataclass
+        class Student(Document):
+            class Meta:
+                collection_name = "students"
+                indexed_fields = ["student_id"]
+
+            student_id: int
+            name: str
+
+            # Many students have many courses
+            courses: ManyToMany[Course] = field(
+                default=ManyToMany(
+                    Course,
+                    through="enrollments",
+                    local_field="student_id",
+                    remote_field="course_id"
+                ),
+                init=False,
+                repr=False,
+                compare=False
+            )
+
+        @dataclass
+        class Course(Document):
+            class Meta:
+                collection_name = "courses"
+                indexed_fields = ["course_id"]
+
+            course_id: int
+            title: str
+
+            # Many courses have many students
+            students: ManyToMany[Student] = field(
+                default=ManyToMany(
+                    Student,
+                    through="enrollments",
+                    local_field="course_id",
+                    remote_field="student_id"
+                ),
+                init=False,
+                repr=False,
+                compare=False
+            )
+
+        student = Student.get(student_id=1)
+        courses = student.courses.all()  # Get all courses
+        student.courses.add(course)      # Enroll in course
+        student.courses.remove(course)   # Drop course
+    """
+
+    def __init__(
+        self,
+        related_model: type[T],
+        through: str,
+        local_field: str,
+        remote_field: str,
+        local_junction_field: str | None = None,
+        remote_junction_field: str | None = None,
+    ):
+        """
+        Initialize ManyToMany descriptor.
+
+        Args:
+            related_model: Related model class
+            through: Junction table name
+            local_field: Field in parent model (e.g., "student_id")
+            remote_field: Field in related model (e.g., "course_id")
+            local_junction_field: Field name in junction table for parent side
+                                 (defaults to local_field)
+            remote_junction_field: Field name in junction table for related side
+                                  (defaults to remote_field)
+        """
+        self.related_model = related_model
+        self.through = through
+        self.local_field = local_field
+        self.remote_field = remote_field
+        self.local_junction_field = local_junction_field or local_field
+        self.remote_junction_field = remote_junction_field or remote_field
+        self.cache_attr: str = ""
+
+    def __set_name__(self, owner: type, name: str):
+        """
+        Called when descriptor is assigned to class attribute.
+
+        Args:
+            owner: Owner class (Document subclass)
+            name: Attribute name
+        """
+        # Cache attribute name for manager instances
+        self.cache_attr = f"_cache_{name}_manager"
+
+    def __get__(
+        self, instance: Document | None, owner: type
+    ) -> ManyToManyManager[T] | ManyToMany:
+        """
+        Get many-to-many manager.
+
+        Args:
+            instance: Document instance (None when accessed on class)
+            owner: Owner class
+
+        Returns:
+            ManyToManyManager for instance access, descriptor for class access
+        """
+        # Class access: return descriptor itself
+        if instance is None:
+            return self
+
+        # Check cache first
+        cached: ManyToManyManager[T] | None = getattr(instance, self.cache_attr, None)
+        if cached is not None:
+            return cached
+
+        # Create manager
+        manager = ManyToManyManager(
+            instance,
+            self.related_model,
+            self.through,
+            self.local_field,
+            self.remote_field,
+            self.local_junction_field,
+            self.remote_junction_field,
+        )
+
+        # Cache the manager
+        setattr(instance, self.cache_attr, manager)
+
+        return manager
+
+    def __set__(self, instance: Document, value: Any):
+        """
+        Prevent direct assignment to ManyToMany.
+
+        Args:
+            instance: Document instance
+            value: Value being assigned
+
+        Raises:
+            AttributeError: Always, as ManyToMany cannot be directly assigned
+        """
+        # Skip if value is a ManyToMany descriptor (happens during dataclass __init__)
+        if isinstance(value, ManyToMany):
+            return
+
+        msg = "Cannot directly assign to ManyToMany. Use add() or remove() methods."
+        raise AttributeError(msg)

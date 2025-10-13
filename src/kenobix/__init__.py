@@ -11,8 +11,8 @@ Enhanced with SQLite3 JSON optimizations for 15-665x faster operations.
    Package exports
 """
 
-from .fields import ForeignKey, RelatedSet
+from .fields import ForeignKey, ManyToMany, RelatedSet
 from .kenobix import KenobiX
 from .odm import Document
 
-__all__ = ("Document", "ForeignKey", "KenobiX", "RelatedSet")
+__all__ = ("Document", "ForeignKey", "KenobiX", "ManyToMany", "RelatedSet")

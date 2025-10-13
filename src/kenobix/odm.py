@@ -264,6 +264,7 @@ class Document:
         """
         from .fields import (  # Import here to avoid circular import  # noqa: PLC0415
             ForeignKey,
+            ManyToMany,
             RelatedSet,
         )
 
@@ -274,7 +275,7 @@ class Document:
                 # Check if field's default is a descriptor (ForeignKey, RelatedSet, etc.)
                 # If so, skip it - descriptors are not data fields
                 class_attr = getattr(self.__class__, field.name, None)
-                if isinstance(class_attr, (ForeignKey, RelatedSet)):
+                if isinstance(class_attr, (ForeignKey, RelatedSet, ManyToMany)):
                     # Skip descriptor fields
                     continue
 
@@ -297,6 +298,7 @@ class Document:
         """
         from .fields import (  # Import here to avoid circular import  # noqa: PLC0415
             ForeignKey,
+            ManyToMany,
             RelatedSet,
         )
 
@@ -311,7 +313,7 @@ class Document:
             for field_name in dir(cls):
                 if not field_name.startswith("_"):
                     class_attr = getattr(cls, field_name, None)
-                    if isinstance(class_attr, (ForeignKey, RelatedSet)):
+                    if isinstance(class_attr, (ForeignKey, RelatedSet, ManyToMany)):
                         descriptor_fields.add(field_name)
 
             # Filter out descriptor fields from data
