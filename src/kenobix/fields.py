@@ -98,7 +98,8 @@ class ForeignKey(Generic[T]):
         self.model = model
         self.optional = optional
         self.related_field = related_field or foreign_key_field
-        self.cache_attr: str | None = None
+        # Will be set by __set_name__ when descriptor is attached to class
+        self.cache_attr: str = ""
 
     def __set_name__(self, owner: type, name: str):
         """
@@ -132,7 +133,7 @@ class ForeignKey(Generic[T]):
             return self
 
         # Check cache first
-        cached = getattr(instance, self.cache_attr, None)
+        cached: T | None = getattr(instance, self.cache_attr, None)
         if cached is not None:
             return cached
 
@@ -154,10 +155,8 @@ class ForeignKey(Generic[T]):
         related = self.model.get(**{self.related_field: fk_value})
 
         if related is None and not self.optional:
-            msg = (
-                f"Related {self.model.__name__} with "
-                f"{self.related_field}={fk_value} not found"
-            )
+            model_name = self.model.__name__  # type: ignore[misc]
+            msg = f"Related {model_name} with {self.related_field}={fk_value} not found"
             raise ValueError(msg)
 
         # Cache the result
@@ -182,7 +181,8 @@ class ForeignKey(Generic[T]):
         # Handle None assignment
         if value is None:
             if not self.optional:
-                msg = f"Cannot set {self.model.__name__} to None (not optional)"
+                model_name = self.model.__name__  # type: ignore[misc]
+                msg = f"Cannot set {model_name} to None (not optional)"
                 raise ValueError(msg)
             setattr(instance, self.foreign_key_field, None)
             setattr(instance, self.cache_attr, None)
