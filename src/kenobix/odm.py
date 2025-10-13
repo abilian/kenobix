@@ -102,9 +102,21 @@ class Document:
         Called when a subclass is created. Process Meta class configuration.
 
         This method extracts configuration from the subclass's Meta class
-        and sets up collection name and indexed fields.
+        and sets up collection name and indexed fields. Also auto-initializes
+        the cattrs converter.
         """
         super().__init_subclass__(**kwargs)
+
+        # Auto-initialize cattrs converter if not already set
+        if not hasattr(cls, "_converter") or cls._converter is None:
+            try:
+                cls._converter = cattrs.Converter()
+            except Exception as e:
+                msg = (
+                    "cattrs is required for ODM functionality. "
+                    "Install with: uv add kenobix[odm]"
+                )
+                raise ImportError(msg) from e
 
         # Process Meta class if present
         if hasattr(cls, "Meta"):
@@ -169,17 +181,11 @@ class Document:
         # Store _id in instance dict (not as dataclass field)
         self._id: int | None = None
 
-        if self._converter is None:
-            self.__class__._converter = cattrs.Converter()
-
     def __post_init__(self):
         """Called by dataclass after __init__. Initialize ODM state."""
         # Initialize _id if not already set
         if not hasattr(self, "_id"):
             self._id: int | None = None
-
-        if self._converter is None:
-            self.__class__._converter = cattrs.Converter()
 
     @classmethod
     def set_database(cls, db: KenobiX):
