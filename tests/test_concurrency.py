@@ -169,11 +169,6 @@ class TestConcurrency:
         # If readers truly run in parallel, total time should be close to
         # the time of a single reader (not 4x)
         avg_worker_time = sum(r["elapsed"] for r in results) / num_workers
-        speedup = avg_worker_time / elapsed
-
-        print(f"\n✓ {num_workers} readers completed in {elapsed:.3f}s")
-        print(f"  Average worker time: {avg_worker_time:.3f}s")
-        print(f"  Speedup: {speedup:.2f}x")
 
         # Allow significant overhead for multiprocessing
         # Process spawn, IPC, and setup can add ~50-100ms total
@@ -204,7 +199,7 @@ class TestConcurrency:
                     for i in range(num_workers)
                 ],
             )
-            elapsed = time.time() - start
+            time.time() - start
 
         # Verify all writes completed
         assert len(results) == num_workers
@@ -222,11 +217,6 @@ class TestConcurrency:
         assert total_records == expected_writes
 
         db.close()
-
-        print(
-            f"\n✓ {num_workers} writers completed {total_writes} inserts in {elapsed:.3f}s"
-        )
-        print(f"  Rate: {total_writes / elapsed:.0f} inserts/sec")
 
     def test_concurrent_readers_and_writers(self, db_path):
         """Test that readers and writers can run concurrently."""
@@ -262,19 +252,10 @@ class TestConcurrency:
             start = time.time()
             # Use mixed_worker for all (reads and writes)
             results = pool.starmap(mixed_worker, tasks)
-            elapsed = time.time() - start
+            time.time() - start
 
         # Verify all operations completed
         assert len(results) == num_readers + num_writers
-
-        # Count operations
-        total_reads = sum(r["read_count"] for r in results)
-        total_writes = sum(r["write_count"] for r in results)
-
-        print(f"\n✓ Mixed workload completed in {elapsed:.3f}s")
-        print(f"  Total reads: {total_reads}")
-        print(f"  Total writes: {total_writes}")
-        print(f"  Combined rate: {(total_reads + total_writes) / elapsed:.0f} ops/sec")
 
         # Verify data integrity
         db = KenobiX(str(db_path), indexed_fields=["worker_id"])
@@ -301,7 +282,7 @@ class TestConcurrency:
                 race_condition_worker,
                 [(str(db_path), i, iterations_per_worker) for i in range(num_workers)],
             )
-            elapsed = time.time() - start
+            time.time() - start
 
         # Verify all operations completed
         total_operations = sum(r["operations"] for r in results)
@@ -318,13 +299,6 @@ class TestConcurrency:
         # (some increments get lost due to read-modify-write races)
         expected_value = expected_operations
         db.close()
-
-        print(f"\n✓ Race condition test completed in {elapsed:.3f}s")
-        print(f"  Expected counter value: {expected_value}")
-        print(f"  Actual counter value: {final_value}")
-        print(
-            f"  Lost updates: {expected_value - final_value} ({((expected_value - final_value) / expected_value * 100):.1f}%)"
-        )
 
         # We expect some lost updates due to race conditions
         # This demonstrates that applications need proper locking
