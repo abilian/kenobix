@@ -1,10 +1,58 @@
 # KenobiX
 
-**High-Performance Minimal Document Database** • **SQLite3-Powered** • **Zero Dependencies**
+**High-Performance Minimal Document Database** • **SQLite3-Powered** • **One Dependency (cattrs)**
 
 KenobiX is a document database with proper SQLite3 JSON optimization, delivering faster searches and faster updates compared to basic implementations.
 
 Based on [KenobiDB](https://github.com/patx/kenobi) by Harrison Erd, enhanced with generated column indexes and optimized concurrency. ("KenobiX" = "Kenobi + indeX").
+
+<!-- toc -->
+
+- [Why KenobiX?](#why-kenobix)
+- [Features](#features)
+- [Performance Benchmarks](#performance-benchmarks)
+- [ACID Compliance](#acid-compliance)
+- [Documentation](#documentation)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Object Document Mapper (ODM)](#object-document-mapper-odm)
+  * [Installation](#installation-1)
+  * [Usage](#usage)
+  * [ODM Features](#odm-features)
+  * [ODM Transaction Support](#odm-transaction-support)
+- [Multi-Collection Support](#multi-collection-support)
+  * [Quick Example](#quick-example)
+  * [Benefits](#benefits)
+  * [ODM with Collections](#odm-with-collections)
+- [ODM Relationships](#odm-relationships)
+  * [Quick Example](#quick-example-1)
+  * [Many-to-Many Relationships](#many-to-many-relationships)
+  * [Relationship Features](#relationship-features)
+- [When to Use KenobiX](#when-to-use-kenobix)
+  * [Perfect For:](#perfect-for)
+  * [Consider Alternatives For:](#consider-alternatives-for)
+- [When to Use Transactions](#when-to-use-transactions)
+  * [Use Transactions For:](#use-transactions-for)
+  * [Auto-commit is Fine For:](#auto-commit-is-fine-for)
+- [Index Selection Strategy](#index-selection-strategy)
+- [API Documentation](#api-documentation)
+  * [Initialization](#initialization)
+  * [CRUD Operations](#crud-operations)
+  * [Transaction Operations](#transaction-operations)
+  * [Advanced Operations](#advanced-operations)
+- [Performance Tips](#performance-tips)
+- [Migration from KenobiDB](#migration-from-kenobidb)
+- [Requirements](#requirements)
+- [Testing](#testing)
+- [Benchmarking](#benchmarking)
+  * [ODM Performance](#odm-performance)
+- [Credits](#credits)
+- [License](#license)
+- [Contributing](#contributing)
+- [Links](#links)
+- [Changelog](#changelog)
+
+<!-- tocstop -->
 
 ## Why KenobiX?
 
@@ -20,6 +68,20 @@ users = db.search('email', 'alice@example.com')
 # Massively faster updates (665x improvement on complex documents)
 db.update('user_id', 123, {'status': 'active'})
 ```
+
+## Features
+
+- **ODM Relationships** - ForeignKey, RelatedSet, and ManyToMany support for managing relationships between models
+- **Multi-Collection Support** - Organize data into separate collections (like MongoDB or SQL tables)
+- **Full ACID Transactions** - Context manager API with savepoints for nested transactions
+- **Automatic Index Usage** - Queries automatically use indexes when available, fall back to json_extract
+- **VIRTUAL Generated Columns** - Minimal storage overhead (~7-20% depending on document complexity)
+- **Thread-Safe** - No RLock on reads, SQLite handles concurrency with WAL mode
+- **MongoDB-like API** - Familiar insert/search/update operations
+- **Optional ODM Layer** - Type-safe dataclass-based models with per-model collections
+- **Cursor Pagination** - Efficient pagination for large datasets
+- **Query Analysis** - Built-in `explain()` for optimization
+- **Zero Runtime Dependencies** - Only Python stdlib (cattrs optional for ODM)
 
 ## Performance Benchmarks
 
@@ -53,20 +115,6 @@ with db.transaction():
     db.update('account_id', 'A2', {'balance': 1100}) # +100
     # Both succeed or both fail - guaranteed atomicity
 ```
-
-## Features
-
-- **ODM Relationships** - ForeignKey, RelatedSet, and ManyToMany support for managing relationships between models
-- **Multi-Collection Support** - Organize data into separate collections (like MongoDB or SQL tables)
-- **Full ACID Transactions** - Context manager API with savepoints for nested transactions
-- **Automatic Index Usage** - Queries automatically use indexes when available, fall back to json_extract
-- **VIRTUAL Generated Columns** - Minimal storage overhead (~7-20% depending on document complexity)
-- **Thread-Safe** - No RLock on reads, SQLite handles concurrency with WAL mode
-- **MongoDB-like API** - Familiar insert/search/update operations
-- **Optional ODM Layer** - Type-safe dataclass-based models with per-model collections
-- **Cursor Pagination** - Efficient pagination for large datasets
-- **Query Analysis** - Built-in `explain()` for optimization
-- **Zero Runtime Dependencies** - Only Python stdlib (cattrs optional for ODM)
 
 ## Documentation
 
@@ -601,7 +649,7 @@ Existing databases work without modification. Add `indexed_fields` to unlock per
 
 ## Requirements
 
-- Python 3.9+
+- Python 3.11+
 - SQLite 3.31.0+ (for generated columns)
 
 ## Testing
@@ -723,7 +771,3 @@ Contributions welcome! Please:
 ## Changelog
 
 See [CHANGES.md](CHANGES.md) for the complete changelog.
-
-**Latest released version: 0.6.0** - Full ACID transaction support with context manager API, savepoints, 25 comprehensive ACID compliance tests, and complete transaction documentation.
-
-**Next version (Unreleased)** - ODM Relationships: ForeignKey, RelatedSet, and ManyToMany support for managing relationships between models with lazy loading, caching, bidirectional navigation, and full transaction support. 217 tests passing.

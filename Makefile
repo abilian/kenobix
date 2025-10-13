@@ -23,6 +23,7 @@ format:
 	ruff format
 	ruff check --fix
 	ruff format
+	markdown-toc -i --maxdepth 3 README.md
 
 clean:
 	rm -rf build/ dist/ *.egg-info htmlcov/ .coverage .pytest_cache/ .mypy_cache/ .ruff_cache/
