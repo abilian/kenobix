@@ -11,27 +11,10 @@ Tests cover:
 
 from dataclasses import dataclass
 
+import cattrs
 import pytest
 
-# Check if cattrs is available
-try:
-    import cattrs
-
-    CATTRS_AVAILABLE = True
-except ImportError:
-    CATTRS_AVAILABLE = False
-
-from kenobix import KenobiX
-
-# Only import Document if cattrs is available
-if CATTRS_AVAILABLE:
-    from kenobix import Document
-
-
-# Skip all tests if cattrs is not available
-pytestmark = pytest.mark.skipif(
-    not CATTRS_AVAILABLE, reason="cattrs not installed (pip install kenobix[odm])"
-)
+from kenobix import Document, KenobiX
 
 
 # Test models

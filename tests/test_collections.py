@@ -336,7 +336,3 @@ class TestCollectionPersistence:
         assert len(db["products"].all(limit=100)) == 1
 
         db.close()
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])

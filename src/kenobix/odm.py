@@ -264,16 +264,17 @@ class Document:
         """
         from .fields import (  # Import here to avoid circular import  # noqa: PLC0415
             ForeignKey,
+            RelatedSet,
         )
 
         # Get all dataclass fields except private ones
         data = {}
         for field in fields(self):  # type: ignore[arg-type]  # self is a dataclass instance
             if not field.name.startswith("_"):
-                # Check if field's default is a descriptor (ForeignKey, etc.)
+                # Check if field's default is a descriptor (ForeignKey, RelatedSet, etc.)
                 # If so, skip it - descriptors are not data fields
                 class_attr = getattr(self.__class__, field.name, None)
-                if isinstance(class_attr, (ForeignKey,)):
+                if isinstance(class_attr, (ForeignKey, RelatedSet)):
                     # Skip descriptor fields
                     continue
 
@@ -296,6 +297,7 @@ class Document:
         """
         from .fields import (  # Import here to avoid circular import  # noqa: PLC0415
             ForeignKey,
+            RelatedSet,
         )
 
         # Use cattrs to structure the data into the dataclass
@@ -304,12 +306,12 @@ class Document:
             data_copy = data.copy()
             data_copy.pop("_id", None)
 
-            # Get descriptor fields (ForeignKey, etc.) to skip during deserialization
+            # Get descriptor fields (ForeignKey, RelatedSet, etc.) to skip during deserialization
             descriptor_fields = set()
             for field_name in dir(cls):
                 if not field_name.startswith("_"):
                     class_attr = getattr(cls, field_name, None)
-                    if isinstance(class_attr, (ForeignKey,)):
+                    if isinstance(class_attr, (ForeignKey, RelatedSet)):
                         descriptor_fields.add(field_name)
 
             # Filter out descriptor fields from data

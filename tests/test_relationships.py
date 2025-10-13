@@ -460,7 +460,3 @@ class TestForeignKeyEdgeCases:
         txn_loaded = Transaction.get(from_user_id=1)
         assert txn_loaded.from_user.name == "Alice"
         assert txn_loaded.to_user.name == "Bob"
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])

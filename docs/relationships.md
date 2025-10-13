@@ -832,11 +832,410 @@ for order in orders:
 # Future: Prefetch support (not yet implemented)
 ```
 
+## RelatedSet Relationships (One-to-Many)
+
+### Overview
+
+`RelatedSet` provides access to the reverse side of a `ForeignKey` relationship, allowing you to query all related objects from the "one" side of a one-to-many relationship.
+
+### Basic Declaration
+
+```python
+from dataclasses import dataclass, field
+from kenobix import ForeignKey, RelatedSet
+from kenobix.odm import Document
+
+@dataclass
+class User(Document):
+    class Meta:
+        collection_name = "users"
+        indexed_fields = ["user_id"]
+
+    user_id: int
+    name: str
+
+    # One-to-many: one user has many orders
+    orders: RelatedSet[Order] = field(
+        default=RelatedSet(Order, "user_id"),
+        init=False,
+        repr=False,
+        compare=False
+    )
+
+@dataclass
+class Order(Document):
+    class Meta:
+        collection_name = "orders"
+        indexed_fields = ["order_id", "user_id"]
+
+    order_id: int
+    user_id: int
+    amount: float
+
+    # Many-to-one: many orders belong to one user
+    user: ForeignKey[User] = field(
+        default=ForeignKey("user_id", User),
+        init=False,
+        repr=False,
+        compare=False
+    )
+
+# Usage
+user = User.get(user_id=1)
+orders = user.orders.all()  # Get all orders for this user
+count = user.orders.count()  # Count orders
+```
+
+### Parameters
+
+**`RelatedSet(related_model, foreign_key_field, local_field=None)`**
+
+- **`related_model`** (type[T], required): Related model class (the "many" side)
+- **`foreign_key_field`** (str, required): Field in related model storing the foreign key
+- **`local_field`** (str, optional): Field in this model that foreign key references. Defaults to `foreign_key_field`
+
+### RelatedSetManager Methods
+
+When you access a `RelatedSet`, you get a `RelatedSetManager` that provides these methods:
+
+#### `all(limit=100)`
+
+Get all related objects:
+
+```python
+user = User.get(user_id=1)
+all_orders = user.orders.all()
+all_orders_limited = user.orders.all(limit=50)
+```
+
+#### `filter(**filters, limit=100)`
+
+Filter related objects by additional criteria:
+
+```python
+# Get orders with specific amount
+expensive_orders = user.orders.filter(amount=99.99)
+
+# Combine multiple filters
+recent_large_orders = user.orders.filter(amount=99.99, status="completed")
+```
+
+#### `count()`
+
+Count related objects:
+
+```python
+order_count = user.orders.count()
+print(f"User has {order_count} orders")
+```
+
+#### `add(obj)`
+
+Add an object to the related set:
+
+```python
+# Create a new order
+new_order = Order(order_id=104, user_id=0, amount=199.99)
+
+# Add it to user's orders (automatically sets user_id and saves)
+user.orders.add(new_order)
+
+# Order is now saved with user_id=1
+```
+
+#### `remove(obj)`
+
+Remove an object from the related set:
+
+```python
+# Remove an order from user
+order = user.orders.all()[0]
+user.orders.remove(order)
+
+# Order still exists but user_id is set to None
+```
+
+#### `clear()`
+
+Remove all objects from the related set:
+
+```python
+# Remove all orders from user
+user.orders.clear()
+
+# All orders still exist but their user_id is set to None
+```
+
+### Iteration and Length
+
+`RelatedSet` supports Python iteration and length operations:
+
+```python
+user = User.get(user_id=1)
+
+# Iterate over related objects
+for order in user.orders:
+    print(f"Order {order.order_id}: ${order.amount}")
+
+# Get count using len()
+num_orders = len(user.orders)
+print(f"User has {num_orders} orders")
+```
+
+### Bidirectional Relationships
+
+`ForeignKey` and `RelatedSet` work together to provide bidirectional navigation:
+
+```python
+# Navigate from order to user (ForeignKey)
+order = Order.get(order_id=101)
+user = order.user
+print(f"Order belongs to: {user.name}")
+
+# Navigate from user to orders (RelatedSet)
+user = User.get(user_id=1)
+orders = user.orders.all()
+print(f"User has {len(orders)} orders")
+```
+
+### Manager Caching
+
+The `RelatedSetManager` is cached per instance:
+
+```python
+user = User.get(user_id=1)
+
+# First access creates manager
+manager1 = user.orders
+
+# Second access returns same manager
+manager2 = user.orders
+
+assert manager1 is manager2  # True - same object
+```
+
+### Performance Considerations
+
+#### Query Efficiency
+
+Each call to `all()` or `filter()` executes a database query:
+
+```python
+user = User.get(user_id=1)
+
+# Each of these executes a query
+orders1 = user.orders.all()  # Query 1
+orders2 = user.orders.all()  # Query 2 (not cached!)
+
+# Store results if needed multiple times
+orders = user.orders.all()
+for order in orders:  # No additional queries
+    print(order.amount)
+```
+
+#### Limiting Results
+
+Always use `limit` for large collections:
+
+```python
+# Good: Limit results
+recent_orders = user.orders.all(limit=10)
+
+# Bad: Load all orders (could be thousands)
+all_orders = user.orders.all(limit=100000)
+```
+
+#### Index Foreign Keys
+
+Ensure foreign key fields are indexed for fast queries:
+
+```python
+@dataclass
+class Order(Document):
+    class Meta:
+        collection_name = "orders"
+        indexed_fields = ["order_id", "user_id"]  # ← Index foreign key!
+
+    order_id: int
+    user_id: int  # Foreign key - must be indexed
+    amount: float
+```
+
+### Transactions with RelatedSet
+
+```python
+with db.transaction():
+    user = User(user_id=1, name="Alice")
+    user.save()
+
+    # Create multiple orders
+    order1 = Order(order_id=101, user_id=0, amount=99.99)
+    order2 = Order(order_id=102, user_id=0, amount=149.99)
+
+    user.orders.add(order1)
+    user.orders.add(order2)
+
+# All changes committed together
+```
+
+### Best Practices for RelatedSet
+
+#### 1. Make Foreign Key Fields Nullable
+
+If you plan to use `remove()` or `clear()`, make the foreign key field nullable:
+
+```python
+@dataclass
+class Order(Document):
+    order_id: int
+    user_id: int | None  # ← Nullable for remove/clear
+    amount: float
+```
+
+#### 2. Use Descriptive Names
+
+```python
+# Good: Plural noun for collections
+orders: RelatedSet[Order] = field(...)
+comments: RelatedSet[Comment] = field(...)
+
+# Avoid: Singular or unclear names
+order_list: RelatedSet[Order] = field(...)  # Unclear
+order: RelatedSet[Order] = field(...)  # Confusing
+```
+
+#### 3. Limit Query Results
+
+```python
+# Good: Always specify reasonable limits
+user.orders.all(limit=100)
+user.orders.filter(status="active", limit=50)
+
+# Bad: Unbounded queries
+user.orders.all(limit=999999)  # Could load entire table
+```
+
+#### 4. Don't Modify Foreign Keys Manually
+
+```python
+# Bad: Manual foreign key modification
+order.user_id = 2
+order.save()
+
+# Good: Use RelatedSet methods
+old_user.orders.remove(order)
+new_user.orders.add(order)
+```
+
+#### 5. Bidirectional Setup
+
+Always define both sides of the relationship:
+
+```python
+# Good: Both sides defined
+@dataclass
+class User(Document):
+    orders: RelatedSet[Order] = field(...)  # ← One side
+
+@dataclass
+class Order(Document):
+    user: ForeignKey[User] = field(...)  # ← Many side
+
+# This allows navigation in both directions
+```
+
+### Common Patterns with RelatedSet
+
+#### Get All Items from Parent
+
+```python
+user = User.get(user_id=1)
+
+# Get all orders
+all_orders = user.orders.all()
+
+# Filter orders
+active_orders = user.orders.filter(status="active")
+expensive_orders = user.orders.filter(amount=999.99)
+```
+
+#### Aggregate Over Related Items
+
+```python
+user = User.get(user_id=1)
+
+# Calculate total spending
+orders = user.orders.all(limit=1000)
+total = sum(order.amount for order in orders)
+print(f"Total spent: ${total:.2f}")
+
+# Find max/min
+amounts = [order.amount for order in orders]
+if amounts:
+    print(f"Largest order: ${max(amounts):.2f}")
+    print(f"Smallest order: ${min(amounts):.2f}")
+```
+
+#### Bulk Operations
+
+```python
+user = User.get(user_id=1)
+
+# Mark all orders as processed
+with db.transaction():
+    orders = user.orders.all(limit=1000)
+    for order in orders:
+        order.status = "processed"
+        order.save()
+```
+
+#### Reassign Related Objects
+
+```python
+old_user = User.get(user_id=1)
+new_user = User.get(user_id=2)
+
+# Move all orders from old_user to new_user
+with db.transaction():
+    orders = old_user.orders.all(limit=1000)
+    for order in orders:
+        old_user.orders.remove(order)
+        new_user.orders.add(order)
+```
+
+### Error Handling
+
+#### Prevent Direct Assignment
+
+```python
+user = User.get(user_id=1)
+
+# This raises AttributeError
+try:
+    user.orders = []  # Error! Cannot assign to RelatedSet
+except AttributeError as e:
+    print(e)  # "Cannot directly assign to RelatedSet..."
+
+# Use add/remove/clear methods instead
+user.orders.clear()
+```
+
+#### Handle Empty Results
+
+```python
+user = User.get(user_id=1)
+
+orders = user.orders.all()
+if not orders:
+    print("User has no orders")
+else:
+    print(f"User has {len(orders)} orders")
+```
+
 ## Future Features
 
 The following features are planned for future releases:
 
-- **One-to-Many (RelatedSet)**: Access reverse relationships
 - **Many-to-Many**: Junction table support
 - **Prefetch**: Batch-load relationships to avoid N+1 queries
 - **Select Related**: Join-like queries for performance

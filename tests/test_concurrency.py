@@ -187,6 +187,10 @@ class TestConcurrency:
 
     def test_concurrent_writers(self, db_path):
         """Test that multiple writers properly serialize via write lock."""
+        # Initialize database before launching workers to prevent WAL initialization race
+        db = KenobiX(str(db_path), indexed_fields=["worker_id", "iteration"])
+        db.close()
+
         # Launch multiple concurrent writers
         num_workers = 4
         iterations_per_worker = 25
@@ -331,6 +335,10 @@ class TestConcurrency:
 
     def test_high_concurrency_stress(self, db_path):
         """Stress test with many concurrent operations."""
+        # Initialize database before launching workers to prevent WAL initialization race
+        db = KenobiX(str(db_path), indexed_fields=["worker_id", "iteration"])
+        db.close()
+
         # Many workers, fewer iterations each
         num_workers = 10
         iterations_per_worker = 20
@@ -344,7 +352,7 @@ class TestConcurrency:
                     for i in range(num_workers)
                 ],
             )
-            elapsed = time.time() - start
+            _elapsed = time.time() - start
 
         # Verify data integrity
         total_writes = sum(r["write_count"] for r in results)
@@ -362,14 +370,12 @@ class TestConcurrency:
 
         db.close()
 
-        print(
-            f"\n✓ Stress test: {num_workers} workers, {total_writes} operations in {elapsed:.3f}s"
-        )
-        print(f"  Rate: {total_writes / elapsed:.0f} ops/sec")
-        print(f"  Data integrity: ✓ All {expected} records present")
-
     def test_database_integrity_after_concurrent_access(self, db_path):
         """Verify database remains consistent after heavy concurrent access."""
+        # Initialize database before launching workers to prevent WAL initialization race
+        db = KenobiX(str(db_path), indexed_fields=["worker_id", "iteration"])
+        db.close()
+
         # Perform concurrent operations
         num_workers = 5
         iterations = 30
@@ -403,40 +409,3 @@ class TestConcurrency:
         assert "INDEX" in plan_str or "SEARCH" in plan_str
 
         db.close()
-
-        print("\n✓ Database integrity verified after concurrent access")
-        print(f"  Total records: {len(all_records)}")
-        print("  All iterations present: ✓")
-        print("  Indexes working: ✓")
-
-
-if __name__ == "__main__":
-    # Allow running directly for manual testing
-    print("Running KenobiX Concurrency Tests")
-    print("=" * 60)
-
-    # Use spawn method for multiprocessing (safer, works on all platforms)
-    multiprocessing.set_start_method("spawn", force=True)
-
-    test = TestConcurrency()
-
-    print("\n1. Testing multiple concurrent readers...")
-    test.test_multiple_concurrent_readers()
-
-    print("\n2. Testing concurrent writers...")
-    test.test_concurrent_writers()
-
-    print("\n3. Testing concurrent readers and writers...")
-    test.test_concurrent_readers_and_writers()
-
-    print("\n4. Testing race conditions...")
-    test.test_race_conditions()
-
-    print("\n5. Testing high concurrency stress...")
-    test.test_high_concurrency_stress()
-
-    print("\n6. Testing database integrity...")
-    test.test_database_integrity_after_concurrent_access()
-
-    print("\n" + "=" * 60)
-    print("✓ All concurrency tests passed!")

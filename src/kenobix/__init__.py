@@ -11,14 +11,8 @@ Enhanced with SQLite3 JSON optimizations for 15-665x faster operations.
    Package exports
 """
 
+from .fields import ForeignKey, RelatedSet
 from .kenobix import KenobiX
+from .odm import Document
 
-# ODM is optional - only import if cattrs is available
-try:
-    from .fields import ForeignKey
-    from .odm import Document
-
-    __all__ = ("Document", "ForeignKey", "KenobiX")
-except ImportError:
-    # cattrs not installed, ODM not available
-    __all__ = ("KenobiX",)
+__all__ = ("Document", "ForeignKey", "KenobiX", "RelatedSet")
