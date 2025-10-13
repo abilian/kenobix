@@ -1232,11 +1232,548 @@ else:
     print(f"User has {len(orders)} orders")
 ```
 
+## ManyToMany Relationships (Many-to-Many)
+
+### Overview
+
+`ManyToMany` enables many-to-many relationships between models through an automatic junction table. This allows multiple instances of one model to be related to multiple instances of another model (e.g., students enrolled in many courses, courses having many students).
+
+### Basic Declaration
+
+```python
+from dataclasses import dataclass
+from kenobix import KenobiX, ManyToMany
+from kenobix.odm import Document
+
+# Set up database
+db = KenobiX('myapp.db')
+Document.set_database(db)
+
+# Define models
+@dataclass
+class Student(Document):
+    class Meta:
+        collection_name = "students"
+        indexed_fields = ["student_id"]
+
+    student_id: int
+    name: str
+
+@dataclass
+class Course(Document):
+    class Meta:
+        collection_name = "courses"
+        indexed_fields = ["course_id"]
+
+    course_id: int
+    title: str
+
+# Add relationships after both classes are defined
+Student.courses = ManyToMany(
+    Course,
+    through="enrollments",
+    local_field="student_id",
+    remote_field="course_id"
+)
+
+Course.students = ManyToMany(
+    Student,
+    through="enrollments",
+    local_field="course_id",
+    remote_field="student_id"
+)
+
+# Usage - bidirectional navigation
+student = Student(student_id=1, name="Alice")
+student.save()
+
+math = Course(course_id=101, title="Math")
+math.save()
+
+# Enroll student in course
+student.courses.add(math)
+
+# Navigate from student to courses
+courses = student.courses.all()
+print(f"{student.name} is enrolled in {len(courses)} courses")
+
+# Navigate from course to students
+students = math.students.all()
+print(f"{math.title} has {len(students)} students")
+```
+
+### Parameters
+
+**`ManyToMany(related_model, through, local_field, remote_field, local_junction_field=None, remote_junction_field=None)`**
+
+- **`related_model`** (type[T], required): Related model class
+- **`through`** (str, required): Junction table name
+- **`local_field`** (str, required): Field in this model (e.g., "student_id")
+- **`remote_field`** (str, required): Field in related model (e.g., "course_id")
+- **`local_junction_field`** (str, optional): Column name in junction table for local side (defaults to `local_field`)
+- **`remote_junction_field`** (str, optional): Column name in junction table for remote side (defaults to `remote_field`)
+
+### Automatic Junction Table
+
+The junction table is automatically created when you first access the ManyToMany relationship:
+
+```python
+# Junction table "enrollments" created automatically with:
+# - student_id column (indexed)
+# - course_id column (indexed)
+# - PRIMARY KEY (student_id, course_id) - prevents duplicates
+```
+
+### ManyToManyManager Methods
+
+When you access a `ManyToMany`, you get a `ManyToManyManager` that provides these methods:
+
+#### `all(limit=100)`
+
+Get all related objects:
+
+```python
+student = Student.get(student_id=1)
+all_courses = student.courses.all()
+limited_courses = student.courses.all(limit=50)
+```
+
+#### `filter(**filters, limit=100)`
+
+Filter related objects by additional criteria:
+
+```python
+# Get courses with specific title
+math_courses = student.courses.filter(title="Math")
+
+# Combine multiple filters
+advanced_courses = student.courses.filter(title="Math", level="Advanced")
+```
+
+#### `count()`
+
+Count related objects:
+
+```python
+course_count = student.courses.count()
+print(f"Student enrolled in {course_count} courses")
+```
+
+#### `add(obj)`
+
+Add a relationship:
+
+```python
+# Create new course
+physics = Course(course_id=102, title="Physics")
+physics.save()
+
+# Enroll student in course
+student.courses.add(physics)
+
+# Idempotent - adding twice doesn't create duplicate
+student.courses.add(physics)  # Safe, no error
+```
+
+#### `remove(obj)`
+
+Remove a relationship:
+
+```python
+# Drop a course
+student.courses.remove(physics)
+
+# Both objects still exist, only relationship removed
+```
+
+#### `clear()`
+
+Remove all relationships:
+
+```python
+# Drop all courses
+student.courses.clear()
+
+# Student and courses still exist, all enrollments removed
+```
+
+### Iteration and Length
+
+`ManyToMany` supports Python iteration and length operations:
+
+```python
+student = Student.get(student_id=1)
+
+# Iterate over related objects
+for course in student.courses:
+    print(f"Enrolled in: {course.title}")
+
+# Get count using len()
+num_courses = len(student.courses)
+print(f"Student has {num_courses} courses")
+```
+
+### Bidirectional Relationships
+
+ManyToMany relationships are bidirectional by design:
+
+```python
+# Navigate from student to courses
+student = Student.get(student_id=1)
+courses = student.courses.all()
+print(f"{student.name}: {[c.title for c in courses]}")
+
+# Navigate from course to students
+course = Course.get(course_id=101)
+students = course.students.all()
+print(f"{course.title}: {[s.name for s in students]}")
+```
+
+### Manager Caching
+
+The `ManyToManyManager` is cached per instance:
+
+```python
+student = Student.get(student_id=1)
+
+# First access creates manager
+manager1 = student.courses
+
+# Second access returns same manager
+manager2 = student.courses
+
+assert manager1 is manager2  # True - same object
+```
+
+### Performance Considerations
+
+#### Query Efficiency
+
+Each call to `all()`, `filter()`, or `count()` executes database queries:
+
+```python
+student = Student.get(student_id=1)
+
+# Each executes a query
+courses1 = student.courses.all()  # Query 1
+courses2 = student.courses.all()  # Query 2 (not cached!)
+
+# Store results if needed multiple times
+courses = student.courses.all()
+for course in courses:  # No additional queries
+    print(course.title)
+```
+
+#### Limiting Results
+
+Always use `limit` for large collections:
+
+```python
+# Good: Reasonable limits
+recent_courses = student.courses.all(limit=10)
+
+# Bad: Unbounded
+all_courses = student.courses.all(limit=999999)
+```
+
+#### N+1 Query Problem
+
+Be aware of the N+1 query problem:
+
+```python
+# This generates N+1 queries
+students = Student.all(limit=100)  # Query 1
+for student in students:
+    courses = student.courses.all()  # N more queries
+```
+
+### Transactions with ManyToMany
+
+ManyToMany operations are transaction-aware:
+
+```python
+# Atomic enrollments
+with db.transaction():
+    student = Student(student_id=1, name="Alice")
+    student.save()
+
+    math = Course(course_id=101, title="Math")
+    math.save()
+
+    science = Course(course_id=102, title="Science")
+    science.save()
+
+    student.courses.add(math)
+    student.courses.add(science)
+
+# All changes committed together
+```
+
+#### Rollback Behavior
+
+Relationships are rolled back on error:
+
+```python
+student = Student.get(student_id=1)
+math = Course.get(course_id=101)
+
+try:
+    with db.transaction():
+        student.courses.add(math)
+        raise ValueError("Simulated error")
+except ValueError:
+    pass
+
+# Enrollment not saved due to rollback
+assert len(student.courses) == 0
+```
+
+### Persistence
+
+Many-to-many relationships persist across database sessions:
+
+```python
+# First session
+db1 = KenobiX('myapp.db')
+Document.set_database(db1)
+
+student = Student(student_id=1, name="Alice")
+student.save()
+
+math = Course(course_id=101, title="Math")
+math.save()
+
+student.courses.add(math)
+db1.close()
+
+# Second session
+db2 = KenobiX('myapp.db')
+Document.set_database(db2)
+
+student_loaded = Student.get(student_id=1)
+courses = student_loaded.courses.all()
+assert len(courses) == 1
+assert courses[0].title == "Math"
+
+db2.close()
+```
+
+### Best Practices for ManyToMany
+
+#### 1. Use Descriptive Junction Table Names
+
+```python
+# Good: Clear purpose
+Student.courses = ManyToMany(Course, through="enrollments", ...)
+User.roles = ManyToMany(Role, through="user_roles", ...)
+
+# Acceptable: Explicit naming
+Product.categories = ManyToMany(Category, through="product_categories", ...)
+```
+
+#### 2. Use Plural Names for Collections
+
+```python
+# Good: Plural indicates collection
+Student.courses = ManyToMany(Course, ...)
+Course.students = ManyToMany(Student, ...)
+
+# Bad: Singular is confusing
+Student.course = ManyToMany(Course, ...)  # Confusing!
+```
+
+#### 3. Define Both Sides
+
+Always define the relationship from both sides for bidirectional navigation:
+
+```python
+# Good: Both sides defined
+Student.courses = ManyToMany(Course, through="enrollments",
+                             local_field="student_id", remote_field="course_id")
+Course.students = ManyToMany(Student, through="enrollments",
+                             local_field="course_id", remote_field="student_id")
+```
+
+#### 4. Index Key Fields
+
+Ensure both key fields in the models are indexed:
+
+```python
+@dataclass
+class Student(Document):
+    class Meta:
+        indexed_fields = ["student_id"]  # ← Index key field
+
+    student_id: int
+    name: str
+```
+
+#### 5. Use Transactions for Batch Operations
+
+```python
+# Good: Atomic batch enrollments
+with db.transaction():
+    for course in courses:
+        student.courses.add(course)
+
+# Bad: Individual transactions (slower)
+for course in courses:
+    student.courses.add(course)  # Separate transaction each time
+```
+
+### Common Patterns with ManyToMany
+
+#### Student Course Enrollment
+
+```python
+# Enroll student in multiple courses
+student = Student.get(student_id=1)
+
+for course_id in [101, 102, 103]:
+    course = Course.get(course_id=course_id)
+    student.courses.add(course)
+
+# Get all enrolled courses
+courses = student.courses.all()
+for course in courses:
+    print(f"Enrolled: {course.title}")
+
+# Count enrollments
+total = student.courses.count()
+print(f"Total courses: {total}")
+```
+
+#### User Roles and Permissions
+
+```python
+@dataclass
+class User(Document):
+    class Meta:
+        collection_name = "users"
+        indexed_fields = ["user_id"]
+
+    user_id: int
+    username: str
+
+@dataclass
+class Role(Document):
+    class Meta:
+        collection_name = "roles"
+        indexed_fields = ["role_id"]
+
+    role_id: int
+    name: str
+
+# Define relationships
+User.roles = ManyToMany(Role, through="user_roles",
+                       local_field="user_id", remote_field="role_id")
+Role.users = ManyToMany(User, through="user_roles",
+                       local_field="role_id", remote_field="user_id")
+
+# Usage
+user = User(user_id=1, username="alice")
+user.save()
+
+admin_role = Role(role_id=1, name="admin")
+admin_role.save()
+
+user.roles.add(admin_role)
+
+# Check roles
+if any(role.name == "admin" for role in user.roles):
+    print("User is admin")
+```
+
+#### Product Tags
+
+```python
+@dataclass
+class Product(Document):
+    class Meta:
+        collection_name = "products"
+        indexed_fields = ["product_id"]
+
+    product_id: int
+    name: str
+    price: float
+
+@dataclass
+class Tag(Document):
+    class Meta:
+        collection_name = "tags"
+        indexed_fields = ["tag_id"]
+
+    tag_id: int
+    name: str
+
+# Define relationships
+Product.tags = ManyToMany(Tag, through="product_tags",
+                         local_field="product_id", remote_field="tag_id")
+Tag.products = ManyToMany(Product, through="product_tags",
+                         local_field="tag_id", remote_field="product_id")
+
+# Usage
+product = Product(product_id=1, name="Laptop", price=999.99)
+product.save()
+
+electronics = Tag(tag_id=1, name="electronics")
+computers = Tag(tag_id=2, name="computers")
+electronics.save()
+computers.save()
+
+product.tags.add(electronics)
+product.tags.add(computers)
+
+# Find products by tag
+for product in electronics.products:
+    print(f"{product.name}: ${product.price}")
+```
+
+### Error Handling
+
+#### Prevent Direct Assignment
+
+```python
+student = Student.get(student_id=1)
+
+# This raises AttributeError
+try:
+    student.courses = []  # Error! Cannot assign to ManyToMany
+except AttributeError as e:
+    print(e)  # "Cannot directly assign to ManyToMany..."
+
+# Use add/remove/clear methods instead
+student.courses.clear()
+```
+
+#### Handle Empty Results
+
+```python
+student = Student.get(student_id=1)
+
+courses = student.courses.all()
+if not courses:
+    print("Student not enrolled in any courses")
+else:
+    print(f"Enrolled in {len(courses)} courses")
+```
+
+#### Duplicate Prevention
+
+Adding the same relationship twice is safe (idempotent):
+
+```python
+student.courses.add(math)
+student.courses.add(math)  # Safe - no duplicate created
+
+# Only one enrollment exists
+assert student.courses.count() == 1
+```
+
 ## Future Features
 
 The following features are planned for future releases:
 
-- **Many-to-Many**: Junction table support
 - **Prefetch**: Batch-load relationships to avoid N+1 queries
 - **Select Related**: Join-like queries for performance
 - **Cascade Delete**: Automatically delete related objects

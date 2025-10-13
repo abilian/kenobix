@@ -8,9 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **ODM Relationships** - ForeignKey and RelatedSet support for managing relationships between models
+- **ODM Relationships** - ForeignKey, RelatedSet, and ManyToMany support for managing relationships between models
   - ForeignKey for many-to-one relationships with lazy loading and caching
   - RelatedSet for one-to-many relationships with query/filter/management methods
+  - ManyToMany for many-to-many relationships through automatic junction tables
   - Bidirectional navigation between related objects
   - Full transaction support and ACID compliance
 - **Multi-Collection Support** - Multiple isolated collections in a single database
@@ -18,10 +19,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - ODM models automatically use separate collections with pluralized names
   - Dictionary-style access and backward compatibility
 - **Documentation** - Complete relationship guide with examples (docs/relationships.md)
+  - Comprehensive ManyToMany documentation (~540 lines)
+  - 8 new examples demonstrating ManyToMany patterns (examples 19-26)
+  - Real-world use cases: student enrollment, user roles, product tagging
 
 ### Changed
-- ODM serialization now skips relationship descriptor fields
+- ODM serialization now skips relationship descriptor fields (ForeignKey, RelatedSet, ManyToMany)
 - Test infrastructure refactored to use pytest fixtures
+
+### Testing
+- 22 comprehensive ManyToMany tests
+- Total test count: 217 tests (195 existing + 22 new)
 
 ### Fixed
 - Database lock errors in concurrent multiprocessing tests
@@ -56,14 +64,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Documentation
 - [docs/transactions.md](docs/transactions.md) - Complete transaction API guide with examples
 - [docs/dev/acid-compliance.md](docs/dev/acid-compliance.md) - Comprehensive ACID test results and proof
-- [examples/transaction_examples.py](examples/transaction_examples.py) - 7 real-world transaction examples:
-  - Banking transfers with atomicity
-  - Batch imports with error recovery
-  - Savepoints for partial rollback
-  - Nested transactions
-  - ODM transaction usage
-  - Performance optimization patterns
-  - Manual transaction control
+- [examples/transaction_examples.py](examples/transaction_examples.py) - 7 real-world transaction examples.
 - Transaction examples and best practices in README Quick Start
 - "When to Use Transactions" section with performance guidance
 
@@ -81,9 +82,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Testing
 - Total test count: 100+ tests covering all features
 - Test coverage maintained at 90%+
-- New test files:
-  - `tests/test_acid_compliance.py` (25 comprehensive ACID tests)
-  - `tests/test_transactions.py` (14 basic transaction tests)
+
 
 ## [0.5.0] - 2025-10-11
 

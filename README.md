@@ -56,6 +56,7 @@ with db.transaction():
 
 ## Features
 
+- **ODM Relationships** - ForeignKey, RelatedSet, and ManyToMany support for managing relationships between models
 - **Multi-Collection Support** - Organize data into separate collections (like MongoDB or SQL tables)
 - **Full ACID Transactions** - Context manager API with savepoints for nested transactions
 - **Automatic Index Usage** - Queries automatically use indexes when available, fall back to json_extract
@@ -70,6 +71,7 @@ with db.transaction():
 ## Documentation
 
 - **[Getting Started](docs/index.md)** - Quick start guide
+- **[Relationships Guide](docs/relationships.md)** - ForeignKey, RelatedSet, and ManyToMany relationships
 - **[Collections Guide](docs/collections.md)** - Multi-collection support and usage
 - **[Transactions](docs/transactions.md)** - Full ACID transaction API guide
 - **[ACID Compliance](docs/dev/acid-compliance.md)** - Comprehensive ACID test results
@@ -335,6 +337,129 @@ order.save()  # -> orders collection
 
 See [docs/collections.md](docs/collections.md) for complete documentation and `examples/collections_example.py` for real-world examples.
 
+## ODM Relationships
+
+KenobiX provides transparent relationship support for modeling connections between documents with ForeignKey, RelatedSet, and ManyToMany relationships.
+
+### Quick Example
+
+```python
+from dataclasses import dataclass, field
+from kenobix import KenobiX, ForeignKey, RelatedSet, ManyToMany
+from kenobix.odm import Document
+
+db = KenobiX('myapp.db')
+Document.set_database(db)
+
+# Define models with relationships
+@dataclass
+class User(Document):
+    class Meta:
+        collection_name = "users"
+        indexed_fields = ["user_id"]
+
+    user_id: int
+    name: str
+
+@dataclass
+class Order(Document):
+    class Meta:
+        collection_name = "orders"
+        indexed_fields = ["order_id", "user_id"]
+
+    order_id: int
+    user_id: int
+    amount: float
+
+    # Many-to-one: many orders belong to one user
+    user: ForeignKey[User] = field(
+        default=ForeignKey("user_id", User),
+        init=False,
+        repr=False,
+        compare=False
+    )
+
+# Add reverse relationship
+User.orders = RelatedSet(Order, "user_id")
+
+# Usage - transparent lazy loading
+user = User(user_id=1, name="Alice")
+user.save()
+
+order = Order(order_id=101, user_id=1, amount=99.99)
+order.save()
+
+# Access related objects
+order = Order.get(order_id=101)
+print(order.user.name)  # "Alice" - lazy loads User
+
+user = User.get(user_id=1)
+for order in user.orders:
+    print(f"Order {order.order_id}: ${order.amount}")
+```
+
+### Many-to-Many Relationships
+
+```python
+@dataclass
+class Student(Document):
+    class Meta:
+        collection_name = "students"
+        indexed_fields = ["student_id"]
+
+    student_id: int
+    name: str
+
+@dataclass
+class Course(Document):
+    class Meta:
+        collection_name = "courses"
+        indexed_fields = ["course_id"]
+
+    course_id: int
+    title: str
+
+# Define bidirectional many-to-many
+Student.courses = ManyToMany(
+    Course,
+    through="enrollments",
+    local_field="student_id",
+    remote_field="course_id"
+)
+
+Course.students = ManyToMany(
+    Student,
+    through="enrollments",
+    local_field="course_id",
+    remote_field="student_id"
+)
+
+# Usage
+student = Student(student_id=1, name="Alice")
+student.save()
+
+math = Course(course_id=101, title="Mathematics")
+math.save()
+
+# Create relationship
+student.courses.add(math)
+
+# Navigate both directions
+print(f"{student.name} is enrolled in {len(student.courses)} courses")
+print(f"{math.title} has {len(math.students)} students")
+```
+
+### Relationship Features
+
+- **ForeignKey** - Many-to-one relationships with lazy loading and caching
+- **RelatedSet** - One-to-many reverse relationships with query/filter methods
+- **ManyToMany** - Many-to-many relationships through automatic junction tables
+- **Bidirectional Navigation** - Navigate relationships from both sides
+- **Transaction Support** - All relationship operations are transaction-aware
+- **Type Safety** - Full generic type hints for IDE autocomplete
+
+See [docs/relationships.md](docs/relationships.md) for complete documentation and `examples/relationships_example.py` for 26 detailed examples.
+
 ## When to Use KenobiX
 
 ### Perfect For:
@@ -506,7 +631,7 @@ python benchmarks/benchmark_complexity.py
 **Test Coverage:** KenobiX maintains 90%+ test coverage across:
 - Core database operations (kenobix.py: 88%+)
 - ODM layer (odm.py: 93%+)
-- 100+ tests covering CRUD, indexing, concurrency, transactions, and ODM features
+- 217 tests covering CRUD, indexing, concurrency, transactions, ODM, and relationships
 
 **ACID Compliance:** 25/25 comprehensive tests passing (100%):
 - 6 atomicity tests (all-or-nothing execution)
@@ -599,4 +724,6 @@ Contributions welcome! Please:
 
 See [CHANGES.md](CHANGES.md) for the complete changelog.
 
-**Latest version: 0.6.0** - Full ACID transaction support with context manager API, savepoints, 25 comprehensive ACID compliance tests, and complete transaction documentation.
+**Latest released version: 0.6.0** - Full ACID transaction support with context manager API, savepoints, 25 comprehensive ACID compliance tests, and complete transaction documentation.
+
+**Next version (Unreleased)** - ODM Relationships: ForeignKey, RelatedSet, and ManyToMany support for managing relationships between models with lazy loading, caching, bidirectional navigation, and full transaction support. 217 tests passing.

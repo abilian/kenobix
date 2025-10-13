@@ -14,7 +14,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from kenobix import ForeignKey, KenobiX, RelatedSet
+from kenobix import ForeignKey, KenobiX, ManyToMany, RelatedSet
 from kenobix.odm import Document
 
 
@@ -1546,6 +1546,801 @@ def example_18_performance_and_limits():
         Path(db_path).unlink()
 
 
+# ============================================================================
+# ManyToMany Examples (Many-to-Many Relationships)
+# ============================================================================
+
+
+def example_19_basic_many_to_many():
+    """Example 19: Basic ManyToMany relationship (Student/Course enrollment)."""
+    print("\n" + "=" * 60)
+    print("Example 19: Basic ManyToMany (Student/Course)")
+    print("=" * 60)
+
+    @dataclass
+    class Student(Document):
+        class Meta:
+            collection_name = "students"
+            indexed_fields = ["student_id"]
+
+        student_id: int
+        name: str
+
+    @dataclass
+    class Course(Document):
+        class Meta:
+            collection_name = "courses"
+            indexed_fields = ["course_id"]
+
+        course_id: int
+        title: str
+
+    # Add relationships after both classes are defined
+    Student.courses = ManyToMany(
+        Course,
+        through="enrollments",
+        local_field="student_id",
+        remote_field="course_id",
+    )
+    Course.students = ManyToMany(
+        Student,
+        through="enrollments",
+        local_field="course_id",
+        remote_field="student_id",
+    )
+
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+        db_path = tmp.name
+
+    try:
+        db = KenobiX(db_path)
+        Document.set_database(db)
+
+        # Create student
+        alice = Student(student_id=1, name="Alice")
+        alice.save()
+        print(f"Created student: {alice.name}")
+
+        # Create courses
+        math = Course(course_id=101, title="Mathematics")
+        math.save()
+
+        physics = Course(course_id=102, title="Physics")
+        physics.save()
+
+        chemistry = Course(course_id=103, title="Chemistry")
+        chemistry.save()
+
+        print("Created 3 courses")
+
+        # Enroll Alice in courses
+        alice_loaded = Student.get(student_id=1)
+        alice_loaded.courses.add(math)
+        alice_loaded.courses.add(physics)
+        alice_loaded.courses.add(chemistry)
+
+        print(f"\nEnrolled {alice.name} in 3 courses")
+
+        # Get all courses for student
+        courses = alice_loaded.courses.all()
+        print(f"\n{alice.name}'s courses:")
+        for course in courses:
+            print(f"  - {course.title}")
+
+        # Count courses
+        count = alice_loaded.courses.count()
+        print(f"\nTotal courses: {count}")
+
+        db.close()
+
+    finally:
+        Path(db_path).unlink()
+
+
+def example_20_bidirectional_many_to_many():
+    """Example 20: Bidirectional ManyToMany navigation."""
+    print("\n" + "=" * 60)
+    print("Example 20: Bidirectional ManyToMany Navigation")
+    print("=" * 60)
+
+    @dataclass
+    class Student(Document):
+        class Meta:
+            collection_name = "students"
+            indexed_fields = ["student_id"]
+
+        student_id: int
+        name: str
+
+    @dataclass
+    class Course(Document):
+        class Meta:
+            collection_name = "courses"
+            indexed_fields = ["course_id"]
+
+        course_id: int
+        title: str
+
+    # Bidirectional relationships
+    Student.courses = ManyToMany(
+        Course,
+        through="enrollments",
+        local_field="student_id",
+        remote_field="course_id",
+    )
+    Course.students = ManyToMany(
+        Student,
+        through="enrollments",
+        local_field="course_id",
+        remote_field="student_id",
+    )
+
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+        db_path = tmp.name
+
+    try:
+        db = KenobiX(db_path)
+        Document.set_database(db)
+
+        # Create students
+        alice = Student(student_id=1, name="Alice")
+        alice.save()
+
+        bob = Student(student_id=2, name="Bob")
+        bob.save()
+
+        charlie = Student(student_id=3, name="Charlie")
+        charlie.save()
+
+        print(f"Created students: {alice.name}, {bob.name}, {charlie.name}")
+
+        # Create course
+        math = Course(course_id=101, title="Mathematics")
+        math.save()
+        print(f"Created course: {math.title}")
+
+        # Enroll from student side
+        alice_loaded = Student.get(student_id=1)
+        alice_loaded.courses.add(math)
+        print(f"\nEnrolled {alice.name} (from student side)")
+
+        # Enroll from course side
+        math_loaded = Course.get(course_id=101)
+        bob_loaded = Student.get(student_id=2)
+        charlie_loaded = Student.get(student_id=3)
+
+        math_loaded.students.add(bob_loaded)
+        math_loaded.students.add(charlie_loaded)
+        print(f"Enrolled {bob.name} and {charlie.name} (from course side)")
+
+        # Navigate from student to courses
+        print("\n--- Student to Courses ---")
+        alice_check = Student.get(student_id=1)
+        print(f"{alice.name}'s courses:")
+        for course in alice_check.courses:
+            print(f"  - {course.title}")
+
+        # Navigate from course to students
+        print("\n--- Course to Students ---")
+        math_check = Course.get(course_id=101)
+        print(f"{math.title} students:")
+        for student in math_check.students:
+            print(f"  - {student.name}")
+
+        db.close()
+
+    finally:
+        Path(db_path).unlink()
+
+
+def example_21_managing_many_to_many():
+    """Example 21: Add, remove, and clear operations."""
+    print("\n" + "=" * 60)
+    print("Example 21: Managing ManyToMany (add/remove/clear)")
+    print("=" * 60)
+
+    @dataclass
+    class Student(Document):
+        class Meta:
+            collection_name = "students"
+            indexed_fields = ["student_id"]
+
+        student_id: int
+        name: str
+
+    @dataclass
+    class Course(Document):
+        class Meta:
+            collection_name = "courses"
+            indexed_fields = ["course_id"]
+
+        course_id: int
+        title: str
+
+    # Add relationships
+    Student.courses = ManyToMany(
+        Course,
+        through="enrollments",
+        local_field="student_id",
+        remote_field="course_id",
+    )
+    Course.students = ManyToMany(
+        Student,
+        through="enrollments",
+        local_field="course_id",
+        remote_field="student_id",
+    )
+
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+        db_path = tmp.name
+
+    try:
+        db = KenobiX(db_path)
+        Document.set_database(db)
+
+        # Create student
+        alice = Student(student_id=1, name="Alice")
+        alice.save()
+
+        # Create courses
+        math = Course(course_id=101, title="Mathematics")
+        math.save()
+
+        physics = Course(course_id=102, title="Physics")
+        physics.save()
+
+        chemistry = Course(course_id=103, title="Chemistry")
+        chemistry.save()
+
+        history = Course(course_id=104, title="History")
+        history.save()
+
+        print("Created student and 4 courses")
+
+        # Add courses
+        alice_loaded = Student.get(student_id=1)
+        alice_loaded.courses.add(math)
+        alice_loaded.courses.add(physics)
+        alice_loaded.courses.add(chemistry)
+        alice_loaded.courses.add(history)
+
+        print(f"\n{alice.name} enrolled in {len(alice_loaded.courses)} courses:")
+        for course in alice_loaded.courses:
+            print(f"  - {course.title}")
+
+        # Remove one course
+        physics_loaded = Course.get(course_id=102)
+        alice_loaded.courses.remove(physics_loaded)
+        print(f"\nRemoved {physics.title}")
+
+        alice_reloaded = Student.get(student_id=1)
+        print(f"{alice.name} now has {len(alice_reloaded.courses)} courses:")
+        for course in alice_reloaded.courses:
+            print(f"  - {course.title}")
+
+        # Try adding duplicate (idempotent)
+        alice_reloaded.courses.add(math)
+        print(f"\nTried adding {math.title} again (idempotent)")
+        print(f"{alice.name} still has {len(alice_reloaded.courses)} courses")
+
+        # Clear all enrollments
+        alice_reloaded.courses.clear()
+        print("\nCleared all courses")
+
+        alice_final = Student.get(student_id=1)
+        print(f"{alice.name} now has {len(alice_final.courses)} courses")
+
+        db.close()
+
+    finally:
+        Path(db_path).unlink()
+
+
+def example_22_filtering_many_to_many():
+    """Example 22: Filtering related objects in ManyToMany."""
+    print("\n" + "=" * 60)
+    print("Example 22: Filtering ManyToMany Relationships")
+    print("=" * 60)
+
+    @dataclass
+    class Student(Document):
+        class Meta:
+            collection_name = "students"
+            indexed_fields = ["student_id"]
+
+        student_id: int
+        name: str
+
+    @dataclass
+    class Course(Document):
+        class Meta:
+            collection_name = "courses"
+            indexed_fields = ["course_id"]
+
+        course_id: int
+        title: str
+        department: str
+
+    # Add relationships
+    Student.courses = ManyToMany(
+        Course,
+        through="enrollments",
+        local_field="student_id",
+        remote_field="course_id",
+    )
+    Course.students = ManyToMany(
+        Student,
+        through="enrollments",
+        local_field="course_id",
+        remote_field="student_id",
+    )
+
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+        db_path = tmp.name
+
+    try:
+        db = KenobiX(db_path)
+        Document.set_database(db)
+
+        # Create student
+        alice = Student(student_id=1, name="Alice")
+        alice.save()
+
+        # Create courses in different departments
+        Course(course_id=101, title="Calculus", department="Math").save()
+        Course(course_id=102, title="Linear Algebra", department="Math").save()
+        Course(course_id=103, title="Mechanics", department="Physics").save()
+        Course(course_id=104, title="Thermodynamics", department="Physics").save()
+        Course(course_id=105, title="Organic Chemistry", department="Chemistry").save()
+
+        print("Created 5 courses in different departments")
+
+        # Enroll in all courses
+        alice_loaded = Student.get(student_id=1)
+        for course_id in [101, 102, 103, 104, 105]:
+            course = Course.get(course_id=course_id)
+            alice_loaded.courses.add(course)
+
+        print(f"\n{alice.name} enrolled in {len(alice_loaded.courses)} courses")
+
+        # Filter by department
+        math_courses = alice_loaded.courses.filter(department="Math")
+        print(f"\nMath courses ({len(math_courses)}):")
+        for course in math_courses:
+            print(f"  - {course.title}")
+
+        physics_courses = alice_loaded.courses.filter(department="Physics")
+        print(f"\nPhysics courses ({len(physics_courses)}):")
+        for course in physics_courses:
+            print(f"  - {course.title}")
+
+        # Filter by title
+        calculus = alice_loaded.courses.filter(title="Calculus")
+        print(f"\nCourse named 'Calculus': {len(calculus)} result(s)")
+        if calculus:
+            print(f"  - {calculus[0].title} ({calculus[0].department})")
+
+        db.close()
+
+    finally:
+        Path(db_path).unlink()
+
+
+def example_23_iteration_and_counting():
+    """Example 23: Iterating and counting ManyToMany relationships."""
+    print("\n" + "=" * 60)
+    print("Example 23: Iteration and Counting")
+    print("=" * 60)
+
+    @dataclass
+    class Student(Document):
+        class Meta:
+            collection_name = "students"
+            indexed_fields = ["student_id"]
+
+        student_id: int
+        name: str
+
+    @dataclass
+    class Course(Document):
+        class Meta:
+            collection_name = "courses"
+            indexed_fields = ["course_id"]
+
+        course_id: int
+        title: str
+        credits: int
+
+    # Add relationships
+    Student.courses = ManyToMany(
+        Course,
+        through="enrollments",
+        local_field="student_id",
+        remote_field="course_id",
+    )
+    Course.students = ManyToMany(
+        Student,
+        through="enrollments",
+        local_field="course_id",
+        remote_field="student_id",
+    )
+
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+        db_path = tmp.name
+
+    try:
+        db = KenobiX(db_path)
+        Document.set_database(db)
+
+        # Create student
+        alice = Student(student_id=1, name="Alice")
+        alice.save()
+
+        # Create courses with credits
+        Course(course_id=101, title="Calculus", credits=4).save()
+        Course(course_id=102, title="Physics", credits=4).save()
+        Course(course_id=103, title="History", credits=3).save()
+        Course(course_id=104, title="Art", credits=2).save()
+
+        # Enroll in all courses
+        alice_loaded = Student.get(student_id=1)
+        for course_id in [101, 102, 103, 104]:
+            course = Course.get(course_id=course_id)
+            alice_loaded.courses.add(course)
+
+        print(f"Enrolled {alice.name} in 4 courses")
+
+        # Use len()
+        course_count = len(alice_loaded.courses)
+        print(f"\n{alice.name} has {course_count} courses")
+
+        # Iterate with for loop
+        print("\nCourses:")
+        for course in alice_loaded.courses:
+            print(f"  - {course.title} ({course.credits} credits)")
+
+        # List comprehension
+        titles = [course.title for course in alice_loaded.courses]
+        print(f"\nCourse titles: {titles}")
+
+        # Calculate total credits using sum
+        total_credits = sum(course.credits for course in alice_loaded.courses)
+        print(f"\nTotal credits: {total_credits}")
+
+        # Find course with most credits
+        max_credits_course = max(alice_loaded.courses, key=lambda c: c.credits)
+        print(
+            f"Course with most credits: {max_credits_course.title} ({max_credits_course.credits})"
+        )
+
+        # Count method
+        count = alice_loaded.courses.count()
+        print(f"\nCourse count: {count}")
+
+        db.close()
+
+    finally:
+        Path(db_path).unlink()
+
+
+def example_24_many_to_many_with_transactions():
+    """Example 24: ManyToMany with transactions."""
+    print("\n" + "=" * 60)
+    print("Example 24: ManyToMany with Transactions")
+    print("=" * 60)
+
+    @dataclass
+    class Student(Document):
+        class Meta:
+            collection_name = "students"
+            indexed_fields = ["student_id"]
+
+        student_id: int
+        name: str
+
+    @dataclass
+    class Course(Document):
+        class Meta:
+            collection_name = "courses"
+            indexed_fields = ["course_id"]
+
+        course_id: int
+        title: str
+
+    # Add relationships
+    Student.courses = ManyToMany(
+        Course,
+        through="enrollments",
+        local_field="student_id",
+        remote_field="course_id",
+    )
+    Course.students = ManyToMany(
+        Student,
+        through="enrollments",
+        local_field="course_id",
+        remote_field="student_id",
+    )
+
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+        db_path = tmp.name
+
+    try:
+        db = KenobiX(db_path)
+        Document.set_database(db)
+
+        # Create student and courses
+        alice = Student(student_id=1, name="Alice")
+        alice.save()
+
+        math = Course(course_id=101, title="Mathematics")
+        math.save()
+
+        physics = Course(course_id=102, title="Physics")
+        physics.save()
+
+        print("Created student and 2 courses")
+
+        # Atomic enrollment of multiple courses
+        print("\nEnrolling atomically...")
+        with db.transaction():
+            alice_loaded = Student.get(student_id=1)
+            alice_loaded.courses.add(math)
+            alice_loaded.courses.add(physics)
+
+        print("Transaction committed")
+
+        # Verify
+        alice_check = Student.get(student_id=1)
+        print(f"{alice.name} has {len(alice_check.courses)} courses")
+
+        # Rollback scenario
+        print("\nAttempting transaction that will fail...")
+        chemistry = Course(course_id=103, title="Chemistry")
+        chemistry.save()
+
+        try:
+            with db.transaction():
+                alice_check.courses.add(chemistry)
+                # Simulate error
+                msg = "Simulated error"
+                raise ValueError(msg)
+        except ValueError:
+            print("Transaction rolled back")
+
+        # Verify rollback
+        alice_final = Student.get(student_id=1)
+        print(f"{alice.name} still has {len(alice_final.courses)} courses")
+        print("Chemistry enrollment was not added")
+
+        # Show final enrollments
+        print("\nFinal courses:")
+        for course in alice_final.courses:
+            print(f"  - {course.title}")
+
+        db.close()
+
+    finally:
+        Path(db_path).unlink()
+
+
+def example_25_user_roles_system():
+    """Example 25: Real-world example - User roles and permissions."""
+    print("\n" + "=" * 60)
+    print("Example 25: User Roles and Permissions System")
+    print("=" * 60)
+
+    @dataclass
+    class User(Document):
+        class Meta:
+            collection_name = "users"
+            indexed_fields = ["user_id", "username"]
+
+        user_id: int
+        username: str
+        email: str
+
+    @dataclass
+    class Role(Document):
+        class Meta:
+            collection_name = "roles"
+            indexed_fields = ["role_id", "name"]
+
+        role_id: int
+        name: str
+        description: str
+
+    # Bidirectional many-to-many relationship
+    User.roles = ManyToMany(
+        Role, through="user_roles", local_field="user_id", remote_field="role_id"
+    )
+    Role.users = ManyToMany(
+        User, through="user_roles", local_field="role_id", remote_field="user_id"
+    )
+
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+        db_path = tmp.name
+
+    try:
+        db = KenobiX(db_path)
+        Document.set_database(db)
+
+        print("Setting up user roles system...\n")
+
+        # Create roles
+        admin = Role(role_id=1, name="admin", description="Full system access")
+        admin.save()
+
+        editor = Role(role_id=2, name="editor", description="Can edit content")
+        editor.save()
+
+        viewer = Role(role_id=3, name="viewer", description="Read-only access")
+        viewer.save()
+
+        print(f"Created roles: {admin.name}, {editor.name}, {viewer.name}")
+
+        # Create users
+        alice = User(user_id=1, username="alice", email="alice@example.com")
+        alice.save()
+
+        bob = User(user_id=2, username="bob", email="bob@example.com")
+        bob.save()
+
+        charlie = User(user_id=3, username="charlie", email="charlie@example.com")
+        charlie.save()
+
+        print(f"Created users: {alice.username}, {bob.username}, {charlie.username}")
+
+        # Assign roles to users
+        alice_loaded = User.get(user_id=1)
+        alice_loaded.roles.add(admin)
+        alice_loaded.roles.add(editor)  # Admin can also edit
+
+        bob_loaded = User.get(user_id=2)
+        bob_loaded.roles.add(editor)
+
+        charlie_loaded = User.get(user_id=3)
+        charlie_loaded.roles.add(viewer)
+
+        print("\nAssigned roles to users")
+
+        # Display user roles
+        print("\n--- User Roles ---")
+        for user_id in [1, 2, 3]:
+            user = User.get(user_id=user_id)
+            roles = [role.name for role in user.roles]
+            print(f"{user.username}: {', '.join(roles)}")
+
+        # Display role memberships
+        print("\n--- Role Memberships ---")
+        for role_id in [1, 2, 3]:
+            role = Role.get(role_id=role_id)
+            users = [user.username for user in role.users]
+            print(f"{role.name}: {', '.join(users)}")
+
+        # Check if user has specific role
+        print("\n--- Permission Checks ---")
+        alice_check = User.get(user_id=1)
+        alice_roles = {role.name for role in alice_check.roles}
+
+        print(f"{alice.username} is admin: {'admin' in alice_roles}")
+        print(f"{alice.username} is editor: {'editor' in alice_roles}")
+
+        bob_check = User.get(user_id=2)
+        bob_roles = {role.name for role in bob_check.roles}
+        print(f"{bob.username} is admin: {'admin' in bob_roles}")
+
+        # Remove role
+        print(f"\nRemoving editor role from {alice.username}...")
+        editor_loaded = Role.get(role_id=2)
+        alice_check.roles.remove(editor_loaded)
+
+        alice_final = User.get(user_id=1)
+        final_roles = [role.name for role in alice_final.roles]
+        print(f"{alice.username} roles now: {', '.join(final_roles)}")
+
+        db.close()
+
+    finally:
+        Path(db_path).unlink()
+
+
+def example_26_performance_and_limits():
+    """Example 26: Performance considerations with ManyToMany."""
+    print("\n" + "=" * 60)
+    print("Example 26: Performance and Limits")
+    print("=" * 60)
+
+    @dataclass
+    class Student(Document):
+        class Meta:
+            collection_name = "students"
+            indexed_fields = ["student_id"]
+
+        student_id: int
+        name: str
+
+    @dataclass
+    class Course(Document):
+        class Meta:
+            collection_name = "courses"
+            indexed_fields = ["course_id"]
+
+        course_id: int
+        title: str
+
+    # Add relationships
+    Student.courses = ManyToMany(
+        Course,
+        through="enrollments",
+        local_field="student_id",
+        remote_field="course_id",
+    )
+    Course.students = ManyToMany(
+        Student,
+        through="enrollments",
+        local_field="course_id",
+        remote_field="student_id",
+    )
+
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+        db_path = tmp.name
+
+    try:
+        db = KenobiX(db_path)
+        Document.set_database(db)
+
+        # Create student
+        alice = Student(student_id=1, name="Alice")
+        alice.save()
+
+        # Create many courses
+        print("Creating 150 courses...")
+        courses_to_create = [
+            Course(course_id=100 + i, title=f"Course {i}") for i in range(150)
+        ]
+        Course.insert_many(courses_to_create)
+        print("Courses created")
+
+        # Enroll in all courses
+        print("\nEnrolling in all courses...")
+        alice_loaded = Student.get(student_id=1)
+        for i in range(150):
+            course = Course.get(course_id=100 + i)
+            alice_loaded.courses.add(course)
+
+        print("Enrollment complete")
+
+        # Default limit is 100
+        courses_default = alice_loaded.courses.all()
+        print(f"\nDefault limit: {len(courses_default)} courses returned")
+
+        # Custom limit
+        courses_limited = alice_loaded.courses.all(limit=50)
+        print(f"Custom limit (50): {len(courses_limited)} courses returned")
+
+        # Get all with high limit
+        courses_all = alice_loaded.courses.all(limit=200)
+        print(f"High limit (200): {len(courses_all)} courses returned")
+
+        # Count doesn't have limit
+        total_count = alice_loaded.courses.count()
+        print(f"\nTotal enrollment count: {total_count}")
+
+        # Performance tips
+        print("\nPerformance Tips:")
+        print("  1. Junction table has composite PRIMARY KEY for uniqueness")
+        print("  2. Junction table has indexes on both columns")
+        print("  3. Use count() instead of len(all()) for large sets")
+        print("  4. Use filter() to narrow results before fetching")
+        print("  5. Adjust limit parameter based on use case")
+        print("  6. add() is idempotent (uses INSERT OR IGNORE)")
+
+        db.close()
+
+    finally:
+        Path(db_path).unlink()
+
+
 def main():
     """Run all examples."""
     print("\n" + "#" * 60)
@@ -1581,6 +2376,20 @@ def main():
     example_16_related_set_with_transactions()
     example_17_blog_with_related_sets()
     example_18_performance_and_limits()
+
+    # ManyToMany examples (Many-to-Many)
+    print("\n" + "=" * 60)
+    print("PART 3: ManyToMany Relationships (Many-to-Many)")
+    print("=" * 60)
+
+    example_19_basic_many_to_many()
+    example_20_bidirectional_many_to_many()
+    example_21_managing_many_to_many()
+    example_22_filtering_many_to_many()
+    example_23_iteration_and_counting()
+    example_24_many_to_many_with_transactions()
+    example_25_user_roles_system()
+    example_26_performance_and_limits()
 
     print("\n" + "#" * 60)
     print("# All examples completed successfully!")
