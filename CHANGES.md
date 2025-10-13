@@ -5,6 +5,12 @@ All notable changes to KenobiX will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.2] - 2025-10-13
+
+### Fixed
+- Database lock errors in concurrent multiprocessing tests
+- ODM cattrs converter now auto-initializes in `__init_subclass__`, eliminating manual setup requirement
+
 ## [0.7.1] - 2025-10-13
 
 ### Added
@@ -25,10 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - ODM serialization now skips relationship descriptor fields (ForeignKey, RelatedSet, ManyToMany)
-- Test infrastructure refactored to use pytest fixtures
 
 ### Testing
-- 22 comprehensive ManyToMany tests
 - Total test count: 217 tests (195 existing + 22 new)
 
 ### Fixed
