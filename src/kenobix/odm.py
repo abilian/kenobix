@@ -262,10 +262,21 @@ class Document:
         Returns:
             Dictionary representation, excluding _id and other private fields
         """
+        from .fields import (  # Import here to avoid circular import  # noqa: PLC0415
+            ForeignKey,
+        )
+
         # Get all dataclass fields except private ones
         data = {}
         for field in fields(self):  # type: ignore[arg-type]  # self is a dataclass instance
             if not field.name.startswith("_"):
+                # Check if field's default is a descriptor (ForeignKey, etc.)
+                # If so, skip it - descriptors are not data fields
+                class_attr = getattr(self.__class__, field.name, None)
+                if isinstance(class_attr, (ForeignKey,)):
+                    # Skip descriptor fields
+                    continue
+
                 value = getattr(self, field.name)
                 data[field.name] = value
 
@@ -283,13 +294,30 @@ class Document:
         Returns:
             Instance of the model class
         """
+        from .fields import (  # Import here to avoid circular import  # noqa: PLC0415
+            ForeignKey,
+        )
+
         # Use cattrs to structure the data into the dataclass
         try:
             # Remove _id from data if present (it's stored separately)
             data_copy = data.copy()
             data_copy.pop("_id", None)
 
-            instance = cls._converter.structure(data_copy, cls)
+            # Get descriptor fields (ForeignKey, etc.) to skip during deserialization
+            descriptor_fields = set()
+            for field_name in dir(cls):
+                if not field_name.startswith("_"):
+                    class_attr = getattr(cls, field_name, None)
+                    if isinstance(class_attr, (ForeignKey,)):
+                        descriptor_fields.add(field_name)
+
+            # Filter out descriptor fields from data
+            data_filtered = {
+                k: v for k, v in data_copy.items() if k not in descriptor_fields
+            }
+
+            instance = cls._converter.structure(data_filtered, cls)
             instance._id = doc_id
             return instance
         except Exception as e:

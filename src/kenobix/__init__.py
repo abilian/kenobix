@@ -15,9 +15,10 @@ from .kenobix import KenobiX
 
 # ODM is optional - only import if cattrs is available
 try:
+    from .fields import ForeignKey
     from .odm import Document
 
-    __all__ = ("Document", "KenobiX")
+    __all__ = ("Document", "ForeignKey", "KenobiX")
 except ImportError:
     # cattrs not installed, ODM not available
     __all__ = ("KenobiX",)

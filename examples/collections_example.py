@@ -40,7 +40,7 @@ def example_1_basic_collections():
             "user_id": 1,
             "name": "Alice",
             "email": "alice@example.com",
-            "role": "customer"
+            "role": "customer",
         })
 
         # Insert into products collection
@@ -48,7 +48,7 @@ def example_1_basic_collections():
             "product_id": 101,
             "name": "Laptop",
             "category": "electronics",
-            "price": 999.99
+            "price": 999.99,
         })
 
         # Query each collection
@@ -119,24 +119,20 @@ def example_3_transactions_across_collections():
 
         # Atomic operation across collections
         with db.transaction():
-            db["users"].insert({
-                "user_id": 1,
-                "name": "Alice",
-                "balance": 1000.0
-            })
+            db["users"].insert({"user_id": 1, "name": "Alice", "balance": 1000.0})
 
             db["orders"].insert({
                 "order_id": 101,
                 "user_id": 1,
                 "amount": 99.99,
-                "status": "completed"
+                "status": "completed",
             })
 
             db["transactions"].insert({
                 "transaction_id": 501,
                 "user_id": 1,
                 "amount": -99.99,
-                "type": "purchase"
+                "type": "purchase",
             })
 
         print("Transaction committed: User, Order, and Transaction created")
@@ -183,7 +179,9 @@ def example_4_ecommerce_application():
         customers = db.collection("customers", indexed_fields=["customer_id", "email"])
         products = db.collection("products", indexed_fields=["product_id", "category"])
         orders = db.collection("orders", indexed_fields=["order_id", "customer_id"])
-        order_items = db.collection("order_items", indexed_fields=["order_id", "product_id"])
+        order_items = db.collection(
+            "order_items", indexed_fields=["order_id", "product_id"]
+        )
 
         # Insert sample data
         print("\nSetting up e-commerce data...")
@@ -191,14 +189,29 @@ def example_4_ecommerce_application():
         # Customers
         customers.insert_many([
             {"customer_id": 1, "name": "Alice", "email": "alice@example.com"},
-            {"customer_id": 2, "name": "Bob", "email": "bob@example.com"}
+            {"customer_id": 2, "name": "Bob", "email": "bob@example.com"},
         ])
 
         # Products
         products.insert_many([
-            {"product_id": 101, "name": "Laptop", "category": "electronics", "price": 999.99},
-            {"product_id": 102, "name": "Mouse", "category": "electronics", "price": 29.99},
-            {"product_id": 103, "name": "Desk", "category": "furniture", "price": 299.99}
+            {
+                "product_id": 101,
+                "name": "Laptop",
+                "category": "electronics",
+                "price": 999.99,
+            },
+            {
+                "product_id": 102,
+                "name": "Mouse",
+                "category": "electronics",
+                "price": 29.99,
+            },
+            {
+                "product_id": 103,
+                "name": "Desk",
+                "category": "furniture",
+                "price": 299.99,
+            },
         ])
 
         # Create an order with items (atomic)
@@ -209,13 +222,13 @@ def example_4_ecommerce_application():
                 "customer_id": 1,
                 "timestamp": time.time(),
                 "status": "completed",
-                "total": 1029.98
+                "total": 1029.98,
             })
 
             # Insert order items
             order_items.insert_many([
                 {"order_id": 1001, "product_id": 101, "quantity": 1, "price": 999.99},
-                {"order_id": 1001, "product_id": 102, "quantity": 1, "price": 29.99}
+                {"order_id": 1001, "product_id": 102, "quantity": 1, "price": 29.99},
             ])
 
         print("Order 1001 created with 2 items")
@@ -466,7 +479,9 @@ def example_8_audit_logging():
 
         # Setup collections
         users = db.collection("users", indexed_fields=["user_id"])
-        audit = db.collection("audit_logs", indexed_fields=["timestamp", "user_id", "action"])
+        audit = db.collection(
+            "audit_logs", indexed_fields=["timestamp", "user_id", "action"]
+        )
 
         def log_action(user_id: int, action: str, details: dict):
             """Helper to log actions to audit collection."""
@@ -474,7 +489,7 @@ def example_8_audit_logging():
                 "timestamp": time.time(),
                 "user_id": user_id,
                 "action": action,
-                "details": details
+                "details": details,
             })
 
         # Create user with audit log

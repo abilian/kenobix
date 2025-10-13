@@ -5,7 +5,111 @@ All notable changes to KenobiX will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - 0.7.0
+## [Unreleased] - 0.8.0
+
+### Added
+
+#### ForeignKey Relationship Support
+- **ForeignKey descriptor** for many-to-one relationships
+  - Transparent lazy loading of related objects
+  - Automatic caching to minimize database queries
+  - Full type hint support with `ForeignKey[T]` generics
+  - IDE autocomplete for related objects
+- **Lazy loading** - Related objects load only when accessed
+  - First access triggers database query
+  - Subsequent accesses use cached value
+  - No memory overhead for unused relationships
+- **Automatic caching** - Instance-level cache using `_cache_<fieldname>` attributes
+  - Same object reference guaranteed for multiple accesses
+  - Cache invalidated only when relationship is reassigned
+- **Optional relationships** - Built-in support for nullable foreign keys
+  - `optional=True` parameter allows None values
+  - Returns None instead of raising error for missing references
+  - Works with `Optional[int]` type hints
+- **Related field mapping** - Support for different field names
+  - `related_field` parameter for custom field mapping
+  - Enables multiple foreign keys to same model
+  - Example: `from_user_id` → `user_id` in User model
+- **Assignment support** - Directly assign related objects
+  - Automatically updates foreign key field
+  - Updates cache simultaneously
+  - Type-safe assignments with validation
+- **Comprehensive error handling**
+  - ValueError for missing related objects (required relationships)
+  - None return for missing objects (optional relationships)
+  - Clear error messages with field and value information
+- **Transaction integration** - Relationships work seamlessly with transactions
+  - Atomic creation of related objects
+  - Rollback restores relationship state
+  - Full ACID compliance maintained
+- **21 comprehensive tests** covering:
+  - Basic foreign key access and lazy loading
+  - Caching behavior and performance
+  - Optional relationships with None handling
+  - Assignment and updates
+  - Error handling for invalid references
+  - Transaction safety and rollback
+  - Persistence across database sessions
+  - Descriptor protocol compliance
+  - Edge cases (zero values, multiple FKs, cache invalidation)
+
+#### Documentation and Examples
+- **[docs/relationships.md](docs/relationships.md)** - Complete relationships guide
+  - ForeignKey API reference
+  - Lazy loading and caching explanation
+  - Optional relationships patterns
+  - Multiple foreign keys to same model
+  - Assignment and update examples
+  - Error handling strategies
+  - Transaction usage with relationships
+  - Performance considerations (N+1 queries, indexing)
+  - Best practices (indexing FKs, using transactions, proper field names)
+  - Common patterns (e-commerce, blog, financial transactions)
+  - Troubleshooting guide
+- **[examples/relationships_example.py](examples/relationships_example.py)** - 10 detailed examples:
+  - Basic ForeignKey with lazy loading
+  - Optional relationships (nullable FKs)
+  - Multiple foreign keys to same model
+  - Assignment and updates
+  - Error handling
+  - Transactions with relationships
+  - Blog application (Users, Posts, Comments)
+  - E-commerce with relationships (Customers, Orders, OrderItems)
+  - Caching behavior demonstration
+  - Best practices showcase
+
+#### ODM Enhancements
+- **Modified serialization** - `_to_dict()` now skips descriptor fields
+  - Prevents JSON serialization errors
+  - ForeignKey descriptors excluded from document data
+  - Maintains clean document structure
+- **Modified deserialization** - `_from_dict()` filters descriptor fields
+  - cattrs no longer tries to deserialize descriptors
+  - Smooth loading of models with relationships
+  - No special handling needed by user code
+
+### Changed
+- **src/kenobix/odm.py** - Updated `_to_dict()` and `_from_dict()` to handle ForeignKey descriptors
+- **src/kenobix/__init__.py** - Added ForeignKey to public API exports
+
+### Testing
+- All 175 tests passing (154 existing + 21 new relationship tests)
+- Test coverage maintained at 87.95%
+- Test execution time: ~2 seconds for full suite
+
+### Performance
+- Lazy loading prevents unnecessary queries
+- Caching eliminates redundant database access
+- Foreign key indexing recommended for optimal performance
+
+### Future Enhancements
+- One-to-Many relationships (RelatedSet)
+- Many-to-Many relationships with junction tables
+- Prefetch support to avoid N+1 queries
+- Select related for join-like queries
+- Cascade delete options
+
+## [0.7.0] - 2025-10-12
 
 ### Added
 
