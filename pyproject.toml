@@ -52,6 +52,10 @@ dev = [
     "coverage>=7.10.7",
 ]
 
+[project.scripts]
+kenobix = "kenobix.cli:main"
+kbx = "kenobix.cli:main"
+
 [project.urls]
 "Homepage" = "https://github.com/abilian/kenobix"
 "Source Code" = "https://github.com/abilian/kenobix"

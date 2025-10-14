@@ -5,9 +5,22 @@ All notable changes to KenobiX will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
 
-(Nothing)
+## [0.7.4] - Unreleased
+
+### Added
+- **Command-Line Interface** - New `kenobix` CLI tool for database operations
+  - `kenobix dump <database>` - Dump database contents in human-readable JSON format
+    - `--output/-o` option to save dump to file instead of stdout
+    - `--table/-t` option to dump only a specific table
+    - Multi-collection support - shows all tables with record counts
+  - `kenobix info <database>` - Display database information
+    - Basic mode: Shows database size and table names with record counts
+    - `-v` (verbose): Shows table details including column and index counts
+    - `-vv` (very verbose): Shows full column definitions and index details
+  - Multiple command aliases: `kenobix` and `kbx`
+  - Zero dependencies - uses only Python standard library (argparse, sqlite3, json)
+
 
 ## [0.7.3] - 2025-10-14
 
@@ -20,11 +33,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Example: `for user in User.all(paginate=True): process(user)`
   - Principle of Least Astonishment: methods named `all()` now truly return "all" records
 
+### Testing
+- 12 new pagination tests covering generator behavior, chunking, filtering, and edge cases
+- Total test count: 229 tests (217 existing + 12 new)
+
+
 ## [0.7.2] - 2025-10-13
 
 ### Fixed
 - Database lock errors in concurrent multiprocessing tests
 - ODM cattrs converter now auto-initializes in `__init_subclass__`, eliminating manual setup requirement
+
 
 ## [0.7.1] - 2025-10-13
 

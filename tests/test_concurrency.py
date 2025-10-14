@@ -295,15 +295,16 @@ class TestConcurrency:
         assert len(results) == 1
         final_value = results[0]["value"]
 
-        # Due to race conditions, final value will be less than expected
+        # Due to race conditions, final value may be less than expected
         # (some increments get lost due to read-modify-write races)
         expected_value = expected_operations
         db.close()
 
-        # We expect some lost updates due to race conditions
+        # Race conditions may cause lost updates, but not always
         # This demonstrates that applications need proper locking
         # for read-modify-write operations
-        assert final_value < expected_value
+        # Final value should be <= expected (never more, possibly less due to races)
+        assert final_value <= expected_value
         # But we should have at least some updates
         assert final_value > 0
 
