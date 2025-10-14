@@ -40,13 +40,15 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import fields, is_dataclass
-from typing import TYPE_CHECKING, Any, ClassVar, Self, TypeVar
+from typing import TYPE_CHECKING, Any, ClassVar, Self, TypeVar, overload
 
 import cattrs
 
 from .kenobix import KenobiX  # noqa: TC001 - Used at runtime for db._connection, etc.
 
 if TYPE_CHECKING:
+    from collections.abc import Generator
+
     from .collection import Collection
 
 T = TypeVar("T", bound="Document")
@@ -376,7 +378,7 @@ class Document:
         Example:
             user = User.get(email="alice@example.com")
         """
-        results = cls.filter(**filters, limit=1)
+        results = cls.filter(**filters, limit=1, paginate=False)
         return results[0] if results else None
 
     @classmethod
@@ -405,34 +407,34 @@ class Document:
         return None
 
     @classmethod
-    def filter(cls, limit: int = 100, offset: int = 0, **filters) -> list[Self]:
+    def _filter_chunk(cls, limit: int | None, offset: int, **filters) -> list[Self]:
         """
-        Get all documents matching the filters.
+        Internal method to fetch a chunk of documents.
 
         Args:
-            limit: Maximum results to return
+            limit: Maximum results to return (None for no limit)
             offset: Number of results to skip
             **filters: Field=value pairs to search
 
         Returns:
             List of model instances
-
-        Example:
-            users = User.filter(age=30, active=True)
         """
         collection = cls._get_collection()
         db = cls._get_db()
 
         if not filters:
-            # Get all documents
-            cursor = db._connection.execute(
-                f"SELECT id, data FROM {collection.name} LIMIT ? OFFSET ?",
-                (limit, offset),
-            )
+            # Get documents without filters
+            if limit is None:
+                query = f"SELECT id, data FROM {collection.name}"
+                params: list[Any] = []
+            else:
+                query = f"SELECT id, data FROM {collection.name} LIMIT ? OFFSET ?"
+                params = [limit, offset]
+            cursor = db._connection.execute(query, params)
         else:
             # Build query manually to get both id and data
             where_parts: list[str] = []
-            params: list[Any] = []
+            params = []
 
             # Use collection's indexed fields
             indexed_fields = collection.get_indexed_fields()
@@ -446,8 +448,11 @@ class Document:
                 params.append(value)
 
             where_clause = " AND ".join(where_parts)
-            query = f"SELECT id, data FROM {collection.name} WHERE {where_clause} LIMIT ? OFFSET ?"
-            params.extend([limit, offset])
+            if limit is None:
+                query = f"SELECT id, data FROM {collection.name} WHERE {where_clause}"
+            else:
+                query = f"SELECT id, data FROM {collection.name} WHERE {where_clause} LIMIT ? OFFSET ?"
+                params.extend([limit, offset])
 
             cursor = db._connection.execute(query, params)
 
@@ -462,18 +467,149 @@ class Document:
         return instances
 
     @classmethod
-    def all(cls, limit: int = 100, offset: int = 0) -> list[Self]:
+    def _paginate(cls, limit: int | None, offset: int, **filters):
         """
-        Get all documents.
+        Generator that yields documents one at a time, fetching in chunks.
 
         Args:
-            limit: Maximum results
-            offset: Number to skip
+            limit: Maximum total results to yield (None for no limit)
+            offset: Number of results to skip initially
+            **filters: Field=value pairs to search
+
+        Yields:
+            Model instances one at a time
+        """
+        chunk_size = 100  # Internal chunk size for memory efficiency
+        current_offset = offset
+        total_yielded = 0
+
+        while True:
+            # Calculate chunk limit based on overall limit
+            if limit is None:
+                fetch_limit = chunk_size
+            else:
+                remaining = limit - total_yielded
+                if remaining <= 0:
+                    break
+                fetch_limit = min(chunk_size, remaining)
+
+            # Fetch a chunk
+            chunk = cls._filter_chunk(
+                limit=fetch_limit, offset=current_offset, **filters
+            )
+
+            # If no results, we're done
+            if not chunk:
+                break
+
+            # Yield each result
+            for instance in chunk:
+                yield instance
+                total_yielded += 1
+
+            # Move to next chunk
+            current_offset += len(chunk)
+
+            # If we got fewer results than requested, we're done
+            if len(chunk) < fetch_limit:
+                break
+
+    @overload
+    @classmethod
+    def filter(
+        cls,
+        limit: int | None = None,
+        offset: int = 0,
+        paginate: bool = False,
+        **filters,
+    ) -> list[Self]: ...
+
+    @overload
+    @classmethod
+    def filter(
+        cls,
+        limit: int | None = None,
+        offset: int = 0,
+        *,
+        paginate: bool = True,
+        **filters,
+    ) -> Generator[Self, None, None]: ...
+
+    @classmethod
+    def filter(
+        cls,
+        limit: int | None = None,
+        offset: int = 0,
+        paginate: bool = False,
+        **filters,
+    ) -> list[Self] | Generator[Self, None, None]:
+        """
+        Get all documents matching the filters.
+
+        Args:
+            limit: Maximum results to return (None for no limit)
+            offset: Number of results to skip
+            paginate: If True, return a generator for memory-efficient iteration
+            **filters: Field=value pairs to search
 
         Returns:
-            List of model instances
+            List of model instances, or generator if paginate=True
+
+        Examples:
+            # Get all users (no limit)
+            users = User.filter(active=True)
+
+            # Get first 10 users
+            users = User.filter(active=True, limit=10)
+
+            # Paginate through all users (memory efficient)
+            for user in User.filter(active=True, paginate=True):
+                process(user)
         """
-        return cls.filter(limit=limit, offset=offset)
+        if paginate:
+            return cls._paginate(limit=limit, offset=offset, **filters)
+
+        return cls._filter_chunk(limit=limit, offset=offset, **filters)
+
+    @overload
+    @classmethod
+    def all(
+        cls, limit: int | None = None, offset: int = 0, paginate: bool = False
+    ) -> list[Self]: ...
+
+    @overload
+    @classmethod
+    def all(
+        cls, limit: int | None = None, offset: int = 0, *, paginate: bool = True
+    ) -> Generator[Self, None, None]: ...
+
+    @classmethod
+    def all(
+        cls, limit: int | None = None, offset: int = 0, paginate: bool = False
+    ) -> list[Self] | Generator[Self, None, None]:
+        """
+        Get all documents (no filters).
+
+        Args:
+            limit: Maximum results to return (None for no limit, the default)
+            offset: Number of results to skip
+            paginate: If True, return a generator for memory-efficient iteration
+
+        Returns:
+            List of model instances, or generator if paginate=True
+
+        Examples:
+            # Get all users (no limit)
+            users = User.all()
+
+            # Get first 50 users
+            users = User.all(limit=50)
+
+            # Paginate through all users (memory efficient for large datasets)
+            for user in User.all(paginate=True):
+                process(user)
+        """
+        return cls.filter(limit=limit, offset=offset, paginate=paginate)
 
     def delete(self) -> bool:
         """

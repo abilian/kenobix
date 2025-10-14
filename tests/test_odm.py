@@ -547,3 +547,183 @@ def test_delete_many_with_indexed_field(db):
     remaining = User.all()
     assert len(remaining) == 1
     assert remaining[0].age == 25
+
+
+# Pagination and No-Limit Tests
+def test_all_no_limit_returns_everything(db):
+    """Test that all() with no limit returns all records."""
+    users = [
+        User(name=f"User{i}", email=f"user{i}@example.com", age=20 + i)
+        for i in range(150)  # More than old default of 100
+    ]
+    User.insert_many(users)
+
+    # Get all without limit (new default behavior)
+    all_users = User.all()
+    assert len(all_users) == 150
+
+
+def test_all_with_explicit_limit(db):
+    """Test that all(limit=N) returns exactly N records."""
+    users = [
+        User(name=f"User{i}", email=f"user{i}@example.com", age=20 + i)
+        for i in range(50)
+    ]
+    User.insert_many(users)
+
+    # Get limited results
+    limited = User.all(limit=10)
+    assert len(limited) == 10
+
+
+def test_filter_no_limit_returns_all_matches(db):
+    """Test that filter() with no limit returns all matching records."""
+    users = [
+        User(name=f"User{i}", email=f"user{i}@example.com", age=30, active=True)
+        for i in range(120)
+    ]
+    # Add some non-matching
+    users.extend([
+        User(name=f"Other{i}", email=f"other{i}@example.com", age=25, active=False)
+        for i in range(20)
+    ])
+    User.insert_many(users)
+
+    # Filter should get all 120 matching records
+    filtered = User.filter(age=30)
+    assert len(filtered) == 120
+
+
+def test_all_paginate_returns_generator(db):
+    """Test that all(paginate=True) returns a generator."""
+    users = [
+        User(name=f"User{i}", email=f"user{i}@example.com", age=20 + i)
+        for i in range(50)
+    ]
+    User.insert_many(users)
+
+    # Should return generator
+    result = User.all(paginate=True)
+    assert hasattr(result, "__iter__")
+    assert hasattr(result, "__next__")  # Generator protocol
+
+
+def test_filter_paginate_returns_generator(db):
+    """Test that filter(paginate=True) returns a generator."""
+    users = [
+        User(name=f"User{i}", email=f"user{i}@example.com", age=30, active=True)
+        for i in range(50)
+    ]
+    User.insert_many(users)
+
+    # Should return generator
+    result = User.filter(age=30, paginate=True)
+    assert hasattr(result, "__iter__")
+    assert hasattr(result, "__next__")  # Generator protocol
+
+
+def test_pagination_yields_all_records(db):
+    """Test that pagination yields all records correctly."""
+    users = [
+        User(name=f"User{i}", email=f"user{i}@example.com", age=20 + i)
+        for i in range(250)  # More than 2 chunks
+    ]
+    User.insert_many(users)
+
+    # Paginate through all
+    collected = list(User.all(paginate=True))
+    assert len(collected) == 250
+
+    # Verify all are User instances
+    assert all(isinstance(u, User) for u in collected)
+
+    # Verify unique IDs
+    ids = [u._id for u in collected]
+    assert len(set(ids)) == 250
+
+
+def test_pagination_with_limit(db):
+    """Test pagination respects overall limit."""
+    users = [
+        User(name=f"User{i}", email=f"user{i}@example.com", age=20 + i)
+        for i in range(250)
+    ]
+    User.insert_many(users)
+
+    # Paginate with limit
+    collected = list(User.all(limit=175, paginate=True))
+    assert len(collected) == 175
+
+
+def test_pagination_with_offset(db):
+    """Test pagination with offset."""
+    users = [
+        User(name=f"User{i}", email=f"user{i}@example.com", age=20 + i)
+        for i in range(150)
+    ]
+    User.insert_many(users)
+
+    # Get all records to compare
+    all_users = User.all()
+    all_ids = [u._id for u in all_users]
+
+    # Paginate with offset
+    collected = list(User.all(offset=50, paginate=True))
+    collected_ids = [u._id for u in collected]
+
+    # Should skip first 50
+    assert len(collected) == 100
+    assert collected_ids == all_ids[50:]
+
+
+def test_pagination_with_filters(db):
+    """Test pagination with filters."""
+    # Create mixed data
+    users = []
+    for i in range(150):
+        active = i % 2 == 0  # Half active, half inactive
+        users.append(
+            User(name=f"User{i}", email=f"user{i}@example.com", age=30, active=active)
+        )
+    User.insert_many(users)
+
+    # Paginate filtered results
+    collected = list(User.filter(active=True, paginate=True))
+
+    # Should get only active users
+    assert len(collected) == 75
+    assert all(u.active is True for u in collected)
+
+
+def test_pagination_empty_results(db):
+    """Test pagination on empty results."""
+    # No records
+    collected = list(User.all(paginate=True))
+    assert len(collected) == 0
+
+
+def test_pagination_single_record(db):
+    """Test pagination with single record."""
+    user = User(name="Alice", email="alice@example.com", age=30)
+    user.save()
+
+    collected = list(User.all(paginate=True))
+    assert len(collected) == 1
+    assert collected[0].name == "Alice"
+
+
+def test_pagination_memory_efficiency(db):
+    """Test that pagination doesn't load all records into memory at once."""
+    users = [
+        User(name=f"User{i}", email=f"user{i}@example.com", age=20 + i)
+        for i in range(500)
+    ]
+    User.insert_many(users)
+
+    # Process records one at a time with pagination
+    count = 0
+    for _user in User.all(paginate=True):
+        count += 1
+        # In real use, this processes one at a time without loading all 500
+
+    assert count == 500

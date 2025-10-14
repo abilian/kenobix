@@ -251,7 +251,7 @@ class RelatedSetManager(Generic[T]):
 
         # Query related model by foreign key field
         return self.related_model.filter(
-            **{self.foreign_key_field: local_value}, limit=limit
+            **{self.foreign_key_field: local_value}, limit=limit, paginate=False
         )
 
     def filter(self, limit: int = 100, **filters) -> list[T]:
@@ -274,7 +274,7 @@ class RelatedSetManager(Generic[T]):
         # Combine foreign key filter with additional filters
         all_filters = {self.foreign_key_field: local_value, **filters}
 
-        return self.related_model.filter(**all_filters, limit=limit)
+        return self.related_model.filter(**all_filters, limit=limit, paginate=False)
 
     def count(self) -> int:
         """

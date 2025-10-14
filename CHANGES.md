@@ -5,6 +5,21 @@ All notable changes to KenobiX will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+(Nothing)
+
+## [0.7.3] - 2025-10-14
+
+### Changed
+- **BREAKING: ODM Query API Redesign** - `all()` and `filter()` now default to no limit instead of 100 records
+  - `all()` and `filter()` now return all matching records by default (previous behavior: limited to 100)
+  - Optional `limit` and `offset` parameters for explicit pagination control
+  - New `paginate=True` parameter returns memory-efficient generator for large datasets
+  - Generator-based pagination internally fetches in 100-record chunks to avoid excessive memory usage
+  - Example: `for user in User.all(paginate=True): process(user)`
+  - Principle of Least Astonishment: methods named `all()` now truly return "all" records
+
 ## [0.7.2] - 2025-10-13
 
 ### Fixed
