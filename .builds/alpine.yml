@@ -12,17 +12,16 @@ sources:
 
 tasks:
   - install: |
-      cd prezo
+      cd kenobix
       uv sync
   - test: |
-      cd prezo
+      cd kenobix
       uv run pytest -q --tb=short
   - lint: |
-      cd prezo
-      uv run ruff check
-      uv run mypy src
+      cd kenobix
+      uv run make lint
   - nox: |
-      cd prezo
+      cd kenobix
       uvx nox
 
 triggers:
