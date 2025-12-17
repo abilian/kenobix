@@ -96,7 +96,7 @@ class Document:
         """Override in subclasses to configure ODM behavior."""
 
         collection_name: str | None = None  # If None, auto-derived from class name
-        indexed_fields: list[str] = []
+        indexed_fields: ClassVar[list[str]] = []
 
     def __init_subclass__(cls, **kwargs):
         """

@@ -155,15 +155,16 @@ def get_table_info(db_path: str, table_name: str) -> dict[str, Any]:
 
     # Get table schema
     cursor.execute(f"PRAGMA table_info({table_name})")
-    columns = []
-    for row in cursor.fetchall():
-        columns.append({
+    columns = [
+        {
             "name": row[1],
             "type": row[2],
             "notnull": bool(row[3]),
             "default": row[4],
             "primary_key": bool(row[5]),
-        })
+        }
+        for row in cursor.fetchall()
+    ]
 
     # Get indexes
     cursor.execute(f"PRAGMA index_list({table_name})")
