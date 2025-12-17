@@ -276,8 +276,12 @@ def cmd_info(args: argparse.Namespace) -> None:
     show_database_info(args.database, args.verbose)
 
 
-def main() -> None:
-    """Main CLI entry point."""
+def main(argv: list[str] | None = None) -> None:
+    """Main CLI entry point.
+
+    Args:
+        argv: Command line arguments. If None, uses sys.argv.
+    """
     parser = argparse.ArgumentParser(
         prog="kenobix",
         description="KenobiX - Simple document database CLI",
@@ -341,7 +345,7 @@ def main() -> None:
     info_parser.set_defaults(func=cmd_info)
 
     # Parse arguments and run command
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     args.func(args)
 
 

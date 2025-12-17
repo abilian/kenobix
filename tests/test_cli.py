@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
+import sqlite3
 
 import pytest
 
@@ -77,8 +77,6 @@ def db_with_collections(db_path):
 def empty_db(db_path):
     """Create an empty database (no tables)."""
     # Just create the SQLite file without any KenobiX tables
-    import sqlite3
-
     conn = sqlite3.connect(str(db_path))
     conn.close()
     return db_path
@@ -285,8 +283,20 @@ class TestPrintHelpers:
     def test_print_column_details(self, capsys):
         """Should print column information."""
         columns = [
-            {"name": "id", "type": "INTEGER", "primary_key": True, "notnull": True, "default": None},
-            {"name": "data", "type": "TEXT", "primary_key": False, "notnull": True, "default": None},
+            {
+                "name": "id",
+                "type": "INTEGER",
+                "primary_key": True,
+                "notnull": True,
+                "default": None,
+            },
+            {
+                "name": "data",
+                "type": "TEXT",
+                "primary_key": False,
+                "notnull": True,
+                "default": None,
+            },
         ]
         print_column_details(columns)
         captured = capsys.readouterr()
@@ -299,7 +309,7 @@ class TestPrintHelpers:
         """Should handle empty index list."""
         print_index_details([], verbosity=2)
         captured = capsys.readouterr()
-        assert captured.out == ""
+        assert not captured.out
 
     def test_print_index_details_with_indexes(self, capsys):
         """Should print index information."""
@@ -361,71 +371,63 @@ class TestCmdHandlers:
 class TestMainCLI:
     """Tests for main CLI entry point."""
 
-    def test_dump_command(self, db_with_data, capsys, monkeypatch):
+    def test_dump_command(self, db_with_data, capsys):
         """Main should handle dump command."""
-        monkeypatch.setattr("sys.argv", ["kenobix", "dump", str(db_with_data)])
-        main()
+        main(["dump", str(db_with_data)])
         captured = capsys.readouterr()
 
         data = json.loads(captured.out)
         assert "tables" in data
 
-    def test_info_command(self, db_with_data, capsys, monkeypatch):
+    def test_info_command(self, db_with_data, capsys):
         """Main should handle info command."""
-        monkeypatch.setattr("sys.argv", ["kenobix", "info", str(db_with_data)])
-        main()
+        main(["info", str(db_with_data)])
         captured = capsys.readouterr()
 
         assert "Database:" in captured.out
 
-    def test_info_verbose(self, db_with_data, capsys, monkeypatch):
+    def test_info_verbose(self, db_with_data, capsys):
         """Info command with -v flag should show details."""
-        monkeypatch.setattr("sys.argv", ["kenobix", "info", "-v", str(db_with_data)])
-        main()
+        main(["info", "-v", str(db_with_data)])
         captured = capsys.readouterr()
 
         assert "Table Details:" in captured.out
 
-    def test_info_very_verbose(self, db_with_data, capsys, monkeypatch):
+    def test_info_very_verbose(self, db_with_data, capsys):
         """Info command with -vv should show column details."""
-        monkeypatch.setattr("sys.argv", ["kenobix", "info", "-vv", str(db_with_data)])
-        main()
+        main(["info", "-vv", str(db_with_data)])
         captured = capsys.readouterr()
 
         assert "Column Details:" in captured.out
 
-    def test_dump_with_table_option(self, db_with_collections, capsys, monkeypatch):
+    def test_dump_with_table_option(self, db_with_collections, capsys):
         """Dump with -t option should dump only that table."""
-        monkeypatch.setattr("sys.argv", ["kenobix", "dump", "-t", "users", str(db_with_collections)])
-        main()
+        main(["dump", "-t", "users", str(db_with_collections)])
         captured = capsys.readouterr()
 
         data = json.loads(captured.out)
         assert "users" in data["tables"]
         assert "orders" not in data["tables"]
 
-    def test_dump_with_output_option(self, db_with_data, tmp_path, capsys, monkeypatch):
+    def test_dump_with_output_option(self, db_with_data, tmp_path):
         """Dump with -o option should write to file."""
         output_file = tmp_path / "output.json"
-        monkeypatch.setattr("sys.argv", ["kenobix", "dump", "-o", str(output_file), str(db_with_data)])
-        main()
+        main(["dump", "-o", str(output_file), str(db_with_data)])
 
         assert output_file.exists()
         data = json.loads(output_file.read_text())
         assert "tables" in data
 
-    def test_missing_command_exits(self, monkeypatch):
+    def test_missing_command_exits(self):
         """Missing command should exit with error."""
-        monkeypatch.setattr("sys.argv", ["kenobix"])
         with pytest.raises(SystemExit) as exc_info:
-            main()
+            main([])
         assert exc_info.value.code == 2  # argparse error code
 
-    def test_version_flag(self, capsys, monkeypatch):
+    def test_version_flag(self, capsys):
         """--version flag should show version."""
-        monkeypatch.setattr("sys.argv", ["kenobix", "--version"])
         with pytest.raises(SystemExit) as exc_info:
-            main()
+            main(["--version"])
         assert exc_info.value.code == 0
         captured = capsys.readouterr()
         assert "kenobix" in captured.out
@@ -436,8 +438,6 @@ class TestEdgeCases:
 
     def test_invalid_json_in_data(self, db_path, capsys):
         """Should handle invalid JSON in data column gracefully."""
-        import sqlite3
-
         # Create database with invalid JSON
         conn = sqlite3.connect(str(db_path))
         cursor = conn.cursor()
