@@ -79,6 +79,7 @@ markers = [
 [tool.coverage.run]
 source_pkgs = ["kenobix"]
 branch = true
+disable_warnings = ["module-not-measured"]
 
 [tool.coverage.report]
 exclude_lines = [
