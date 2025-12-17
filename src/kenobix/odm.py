@@ -39,7 +39,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import fields, is_dataclass
-from typing import TYPE_CHECKING, Any, ClassVar, Self, TypeVar, overload
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self, TypeVar, overload
 
 import cattrs
 
@@ -172,7 +172,7 @@ class Document:
         # User → users, Order → orders
         return word_lower + "s"
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         """
         Initialize document.
 
@@ -182,11 +182,11 @@ class Document:
         # Store _id in instance dict (not as dataclass field)
         self._id: int | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Called by dataclass after __init__. Initialize ODM state."""
         # Initialize _id if not already set
         if not hasattr(self, "_id"):
-            self._id: int | None = None
+            self._id = None
 
     @classmethod
     def set_database(cls, db: KenobiX):
@@ -519,8 +519,8 @@ class Document:
         cls,
         limit: int | None = None,
         offset: int = 0,
-        paginate: bool = False,
-        **filters,
+        paginate: Literal[False] = False,
+        **filters: Any,
     ) -> list[Self]: ...
 
     @overload
@@ -530,8 +530,8 @@ class Document:
         limit: int | None = None,
         offset: int = 0,
         *,
-        paginate: bool = True,
-        **filters,
+        paginate: Literal[True],
+        **filters: Any,
     ) -> Generator[Self, None, None]: ...
 
     @classmethod
@@ -573,13 +573,13 @@ class Document:
     @overload
     @classmethod
     def all(
-        cls, limit: int | None = None, offset: int = 0, paginate: bool = False
+        cls, limit: int | None = None, offset: int = 0, paginate: Literal[False] = False
     ) -> list[Self]: ...
 
     @overload
     @classmethod
     def all(
-        cls, limit: int | None = None, offset: int = 0, *, paginate: bool = True
+        cls, limit: int | None = None, offset: int = 0, *, paginate: Literal[True]
     ) -> Generator[Self, None, None]: ...
 
     @classmethod
@@ -608,7 +608,9 @@ class Document:
             for user in User.all(paginate=True):
                 process(user)
         """
-        return cls.filter(limit=limit, offset=offset, paginate=paginate)
+        if paginate:
+            return cls.filter(limit=limit, offset=offset, paginate=True)
+        return cls.filter(limit=limit, offset=offset, paginate=False)
 
     def delete(self) -> bool:
         """
