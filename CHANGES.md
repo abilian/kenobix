@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
-## [0.7.4] - Unreleased
+## [0.8.0] - 2025-12-17
 
 ### Added
 - **Command-Line Interface** - New `kenobix` CLI tool for database operations
@@ -20,6 +20,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `-vv` (very verbose): Shows full column definitions and index details
   - Multiple command aliases: `kenobix` and `kbx`
   - Zero dependencies - uses only Python standard library (argparse, sqlite3, json)
+  - Testable API: `main(argv)` accepts optional arguments for testing without monkeypatching
+
+### Fixed
+- Fixed mypy errors: overloaded function signatures now properly distinguish return types
+- ODM `filter()` and `all()` overloads now use `Literal[True]`/`Literal[False]` for better type inference
+
+### Testing
+- 43 new CLI tests covering all commands, options, error handling, and edge cases
+- Total test count: 272 tests (229 existing + 43 new)
+- Test coverage: 90%+ maintained
 
 
 ## [0.7.3] - 2025-10-14
