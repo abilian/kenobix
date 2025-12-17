@@ -6,11 +6,12 @@ Tests cover:
 - Database info display
 - Error handling for missing files and tables
 - Output formatting
+- Database resolution (argument, env var, auto-detection)
+- Options before and after command
 """
 
 from __future__ import annotations
 
-import argparse
 import json
 import sqlite3
 
@@ -21,17 +22,25 @@ from kenobix.cli import (
     check_database_exists,
     cmd_dump,
     cmd_info,
+    create_parser,
     dump_database,
     dump_table,
+    find_database,
     get_all_tables,
+    get_indexed_fields,
     get_table_info,
+    infer_json_type,
+    infer_pseudo_schema,
     main,
+    merge_types,
     print_column_details,
     print_database_header,
     print_index_details,
+    resolve_database,
     show_basic_table_list,
     show_database_info,
     show_detailed_table_info,
+    show_single_table_info,
 )
 
 
@@ -95,6 +104,62 @@ class TestCheckDatabaseExists:
         missing_path = tmp_path / "nonexistent.db"
         with pytest.raises(SystemExit) as exc_info:
             check_database_exists(str(missing_path))
+        assert exc_info.value.code == 1
+
+
+class TestFindDatabase:
+    """Tests for find_database function."""
+
+    def test_finds_env_variable(self, db_with_data, monkeypatch):
+        """Should find database from environment variable."""
+        monkeypatch.setenv("KENOBIX_DATABASE", str(db_with_data))
+        assert find_database() == str(db_with_data)
+
+    def test_finds_single_db_file(self, db_with_data, monkeypatch):
+        """Should find single .db file in current directory."""
+        monkeypatch.delenv("KENOBIX_DATABASE", raising=False)
+        monkeypatch.chdir(db_with_data.parent)
+        assert find_database() == str(db_with_data)
+
+    def test_returns_none_when_multiple_db_files(self, tmp_path, monkeypatch):
+        """Should return None when multiple .db files exist."""
+        monkeypatch.delenv("KENOBIX_DATABASE", raising=False)
+        (tmp_path / "one.db").touch()
+        (tmp_path / "two.db").touch()
+        monkeypatch.chdir(tmp_path)
+        assert find_database() is None
+
+    def test_returns_none_when_no_db_files(self, tmp_path, monkeypatch):
+        """Should return None when no .db files exist."""
+        monkeypatch.delenv("KENOBIX_DATABASE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        assert find_database() is None
+
+
+class TestResolveDatabase:
+    """Tests for resolve_database function."""
+
+    def test_uses_explicit_argument(self, db_with_data):
+        """Should use database from argument."""
+        parser = create_parser()
+        args = parser.parse_args(["dump", "-d", str(db_with_data)])
+        assert resolve_database(args) == str(db_with_data)
+
+    def test_falls_back_to_env_variable(self, db_with_data, monkeypatch):
+        """Should fall back to environment variable."""
+        monkeypatch.setenv("KENOBIX_DATABASE", str(db_with_data))
+        parser = create_parser()
+        args = parser.parse_args(["dump"])
+        assert resolve_database(args) == str(db_with_data)
+
+    def test_exits_when_no_database(self, tmp_path, monkeypatch):
+        """Should exit with helpful error when no database found."""
+        monkeypatch.delenv("KENOBIX_DATABASE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        parser = create_parser()
+        args = parser.parse_args(["dump"])
+        with pytest.raises(SystemExit) as exc_info:
+            resolve_database(args)
         assert exc_info.value.code == 1
 
 
@@ -204,6 +269,26 @@ class TestDumpDatabase:
         assert output_file.exists()
         data = json.loads(output_file.read_text())
         assert "database" in data
+
+    def test_compact_output(self, db_with_data, capsys):
+        """Compact mode should output JSON without indentation."""
+        dump_database(str(db_with_data), compact=True)
+        captured = capsys.readouterr()
+
+        # Should be valid JSON without newlines in the middle
+        data = json.loads(captured.out)
+        assert "database" in data
+        # Compact JSON has no indentation
+        assert "\n  " not in captured.out
+
+    def test_quiet_mode(self, db_with_data, tmp_path, capsys):
+        """Quiet mode should suppress status messages."""
+        output_file = tmp_path / "dump.json"
+        dump_database(str(db_with_data), output_file=str(output_file), quiet=True)
+        captured = capsys.readouterr()
+
+        # Should not print "Database dumped to:" message
+        assert "dumped to" not in captured.err
 
     def test_exits_on_missing_database(self, tmp_path):
         """Should exit when database doesn't exist."""
@@ -345,11 +430,8 @@ class TestCmdHandlers:
 
     def test_cmd_dump(self, db_with_data, capsys):
         """cmd_dump should call dump_database."""
-        args = argparse.Namespace(
-            database=str(db_with_data),
-            output=None,
-            table=None,
-        )
+        parser = create_parser()
+        args = parser.parse_args(["dump", "-d", str(db_with_data)])
         cmd_dump(args)
         captured = capsys.readouterr()
 
@@ -358,10 +440,8 @@ class TestCmdHandlers:
 
     def test_cmd_info(self, db_with_data, capsys):
         """cmd_info should call show_database_info."""
-        args = argparse.Namespace(
-            database=str(db_with_data),
-            verbose=0,
-        )
+        parser = create_parser()
+        args = parser.parse_args(["info", "-d", str(db_with_data)])
         cmd_info(args)
         captured = capsys.readouterr()
 
@@ -373,7 +453,7 @@ class TestMainCLI:
 
     def test_dump_command(self, db_with_data, capsys):
         """Main should handle dump command."""
-        main(["dump", str(db_with_data)])
+        main(["dump", "-d", str(db_with_data)])
         captured = capsys.readouterr()
 
         data = json.loads(captured.out)
@@ -381,48 +461,128 @@ class TestMainCLI:
 
     def test_info_command(self, db_with_data, capsys):
         """Main should handle info command."""
-        main(["info", str(db_with_data)])
+        main(["info", "-d", str(db_with_data)])
         captured = capsys.readouterr()
 
         assert "Database:" in captured.out
 
+    def test_database_option_before_command(self, db_with_data, capsys):
+        """Database option should work before command."""
+        main(["-d", str(db_with_data), "dump"])
+        captured = capsys.readouterr()
+
+        data = json.loads(captured.out)
+        assert "tables" in data
+
+    def test_database_option_after_command(self, db_with_data, capsys):
+        """Database option should work after command."""
+        main(["dump", "-d", str(db_with_data)])
+        captured = capsys.readouterr()
+
+        data = json.loads(captured.out)
+        assert "tables" in data
+
     def test_info_verbose(self, db_with_data, capsys):
         """Info command with -v flag should show details."""
-        main(["info", "-v", str(db_with_data)])
+        main(["info", "-d", str(db_with_data), "-v"])
         captured = capsys.readouterr()
 
         assert "Table Details:" in captured.out
 
     def test_info_very_verbose(self, db_with_data, capsys):
         """Info command with -vv should show column details."""
-        main(["info", "-vv", str(db_with_data)])
+        main(["info", "-d", str(db_with_data), "-vv"])
         captured = capsys.readouterr()
 
         assert "Column Details:" in captured.out
 
+    def test_info_with_table_option(self, db_with_collections, capsys):
+        """Info with -t option should show detailed info with pseudo-schema."""
+        main(["info", "-d", str(db_with_collections), "-t", "users"])
+        captured = capsys.readouterr()
+
+        assert "Table: users" in captured.out
+        assert "Pseudo-schema" in captured.out
+        assert "orders" not in captured.out
+
+    def test_info_with_table_option_verbose(self, db_with_collections, capsys):
+        """Info with -t and -v should show sample values."""
+        main(["info", "-d", str(db_with_collections), "-t", "users", "-v"])
+        captured = capsys.readouterr()
+
+        assert "Table: users" in captured.out
+        assert "examples:" in captured.out
+        assert "orders" not in captured.out
+
+    def test_info_with_invalid_table(self, db_with_data, capsys):
+        """Info with invalid table should exit with error."""
+        with pytest.raises(SystemExit) as exc_info:
+            main(["info", "-d", str(db_with_data), "-t", "nonexistent"])
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "not found" in captured.err
+
     def test_dump_with_table_option(self, db_with_collections, capsys):
         """Dump with -t option should dump only that table."""
-        main(["dump", "-t", "users", str(db_with_collections)])
+        main(["dump", "-d", str(db_with_collections), "-t", "users"])
         captured = capsys.readouterr()
 
         data = json.loads(captured.out)
         assert "users" in data["tables"]
         assert "orders" not in data["tables"]
 
-    def test_dump_with_output_option(self, db_with_data, tmp_path):
+    def test_dump_with_output_option(self, db_with_data, tmp_path, capsys):
         """Dump with -o option should write to file."""
         output_file = tmp_path / "output.json"
-        main(["dump", "-o", str(output_file), str(db_with_data)])
+        main(["dump", "-d", str(db_with_data), "-o", str(output_file)])
 
         assert output_file.exists()
         data = json.loads(output_file.read_text())
         assert "tables" in data
 
-    def test_missing_command_exits(self):
-        """Missing command should exit with error."""
-        with pytest.raises(SystemExit) as exc_info:
-            main([])
-        assert exc_info.value.code == 2  # argparse error code
+    def test_dump_compact_option(self, db_with_data, capsys):
+        """Dump with --compact should output minified JSON."""
+        main(["dump", "-d", str(db_with_data), "--compact"])
+        captured = capsys.readouterr()
+
+        data = json.loads(captured.out)
+        assert "tables" in data
+        assert "\n  " not in captured.out
+
+    def test_quiet_option(self, db_with_data, tmp_path, capsys):
+        """Quiet option should suppress status messages."""
+        output_file = tmp_path / "output.json"
+        main(["dump", "-d", str(db_with_data), "-o", str(output_file), "-q"])
+        captured = capsys.readouterr()
+
+        assert "dumped to" not in captured.err
+
+    def test_env_variable_database(self, db_with_data, capsys, monkeypatch):
+        """Should use KENOBIX_DATABASE environment variable."""
+        monkeypatch.setenv("KENOBIX_DATABASE", str(db_with_data))
+        main(["dump"])
+        captured = capsys.readouterr()
+
+        data = json.loads(captured.out)
+        assert "tables" in data
+
+    def test_auto_detect_database(self, db_with_data, capsys, monkeypatch):
+        """Should auto-detect single .db file in current directory."""
+        monkeypatch.delenv("KENOBIX_DATABASE", raising=False)
+        monkeypatch.chdir(db_with_data.parent)
+        main(["dump"])
+        captured = capsys.readouterr()
+
+        data = json.loads(captured.out)
+        assert "tables" in data
+
+    def test_no_command_shows_help(self, capsys):
+        """No command should show help."""
+        main([])
+        captured = capsys.readouterr()
+
+        assert "usage:" in captured.out.lower()
+        assert "commands:" in captured.out.lower()
 
     def test_version_flag(self, capsys):
         """--version flag should show version."""
@@ -484,3 +644,180 @@ class TestEdgeCases:
         records = data["tables"]["documents"]["records"]
         assert records[0]["user"]["address"]["city"] == "Paris"
         assert records[0]["tags"] == ["admin", "active"]
+
+    def test_no_database_specified_shows_help(self, tmp_path, capsys, monkeypatch):
+        """Should show helpful error when no database found."""
+        monkeypatch.delenv("KENOBIX_DATABASE", raising=False)
+        monkeypatch.chdir(tmp_path)
+        with pytest.raises(SystemExit) as exc_info:
+            main(["dump"])
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "No database specified" in captured.err
+        assert "-d/--database" in captured.err
+
+
+class TestPseudoSchema:
+    """Tests for pseudo-schema inference functionality."""
+
+    @pytest.fixture
+    def db_with_varied_data(self, tmp_path):
+        """Create a database with varied data types for schema inference."""
+        db_path = tmp_path / "varied.db"
+        db = KenobiX(str(db_path), indexed_fields=["name", "email"])
+
+        # Insert documents with varied fields and types
+        db.insert({
+            "name": "Alice",
+            "email": "alice@example.com",
+            "age": 30,
+            "active": True,
+        })
+        db.insert({"name": "Bob", "email": "bob@example.com", "age": 25})
+        db.insert({
+            "name": "Charlie",
+            "email": "charlie@example.com",
+            "active": False,
+            "tags": ["admin"],
+        })
+        db.insert({"name": "Diana", "age": 35, "metadata": {"role": "admin"}})
+        db.insert({"name": "Eve", "score": 95.5})
+
+        db.close()
+        return db_path
+
+    def test_infer_json_type_primitives(self):
+        """Should correctly infer types for primitive values."""
+        assert infer_json_type(None) == "null"
+        assert infer_json_type(True) == "boolean"
+        assert infer_json_type(False) == "boolean"
+        assert infer_json_type(42) == "integer"
+        assert infer_json_type(3.5) == "number"
+        assert infer_json_type("hello") == "string"
+
+    def test_infer_json_type_complex(self):
+        """Should correctly infer types for complex values."""
+        assert infer_json_type([1, 2, 3]) == "array"
+        assert infer_json_type({"key": "value"}) == "object"
+
+    def test_merge_types_single(self):
+        """Should return single type unchanged."""
+        assert merge_types({"string"}) == "string"
+        assert merge_types({"integer"}) == "integer"
+
+    def test_merge_types_nullable(self):
+        """Should mark nullable types with ?."""
+        assert merge_types({"string", "null"}) == "string?"
+        assert merge_types({"integer", "null"}) == "integer?"
+
+    def test_merge_types_numeric(self):
+        """Should merge integer and number to number."""
+        assert merge_types({"integer", "number"}) == "number"
+
+    def test_merge_types_multiple(self):
+        """Should join multiple types with |."""
+        result = merge_types({"string", "integer"})
+        assert "string" in result
+        assert "integer" in result
+        assert "|" in result
+
+    def test_get_indexed_fields(self, db_with_varied_data):
+        """Should detect indexed fields from index names."""
+        indexed = get_indexed_fields(str(db_with_varied_data), "documents")
+        assert "name" in indexed
+        assert "email" in indexed
+
+    def test_get_indexed_fields_empty(self, db_path):
+        """Should return empty list for table without indexes."""
+        db = KenobiX(str(db_path))
+        db.insert({"test": "data"})
+        db.close()
+
+        indexed = get_indexed_fields(str(db_path), "documents")
+        assert indexed == []
+
+    def test_infer_pseudo_schema_basic(self, db_with_varied_data):
+        """Should infer schema from database records."""
+        schema = infer_pseudo_schema(str(db_with_varied_data), "documents")
+
+        assert "_meta" in schema
+        assert schema["_meta"]["records_analyzed"] == 5
+
+        assert "name" in schema
+        assert schema["name"]["type"] == "string"
+        assert schema["name"]["presence"] == 1.0
+
+    def test_infer_pseudo_schema_optional_fields(self, db_with_varied_data):
+        """Should detect optional fields with presence < 100%."""
+        schema = infer_pseudo_schema(str(db_with_varied_data), "documents")
+
+        # email is present in 3/5 records
+        assert "email" in schema
+        assert schema["email"]["presence"] < 1.0
+
+        # tags is present in 1/5 records
+        assert "tags" in schema
+        assert schema["tags"]["presence"] < 1.0
+
+    def test_infer_pseudo_schema_mixed_types(self, db_path):
+        """Should handle fields with multiple types."""
+        db = KenobiX(str(db_path))
+        db.insert({"value": 42})
+        db.insert({"value": "string"})
+        db.insert({"value": None})
+        db.close()
+
+        schema = infer_pseudo_schema(str(db_path), "documents")
+        assert "value" in schema
+        # Type should show both or nullable
+        assert "?" in schema["value"]["type"] or "|" in schema["value"]["type"]
+
+    def test_show_single_table_info(self, db_with_varied_data, capsys):
+        """Should display table info with pseudo-schema."""
+        show_single_table_info(str(db_with_varied_data), "documents")
+        captured = capsys.readouterr()
+
+        assert "Table: documents" in captured.out
+        assert "Records: 5" in captured.out
+        assert "Indexed fields:" in captured.out
+        assert "Pseudo-schema" in captured.out
+        assert "name:" in captured.out
+        assert "[indexed]" in captured.out
+
+    def test_show_single_table_info_verbose(self, db_with_varied_data, capsys):
+        """Should show sample values with verbosity."""
+        show_single_table_info(str(db_with_varied_data), "documents", verbosity=1)
+        captured = capsys.readouterr()
+
+        assert "examples:" in captured.out
+
+    def test_show_single_table_info_very_verbose(self, db_with_varied_data, capsys):
+        """Should show SQLite schema with high verbosity."""
+        show_single_table_info(str(db_with_varied_data), "documents", verbosity=2)
+        captured = capsys.readouterr()
+
+        assert "SQLite Schema:" in captured.out
+        assert "Indexes:" in captured.out
+
+    def test_info_single_table_via_main(self, db_with_varied_data, capsys):
+        """Main CLI should show pseudo-schema for single table."""
+        main(["info", "-d", str(db_with_varied_data), "-t", "documents"])
+        captured = capsys.readouterr()
+
+        assert "Pseudo-schema" in captured.out
+        assert "name: string" in captured.out
+        assert "[indexed]" in captured.out
+
+    def test_info_empty_table_schema(self, db_path, capsys):
+        """Should handle empty tables gracefully."""
+        conn = sqlite3.connect(str(db_path))
+        cursor = conn.cursor()
+        cursor.execute("CREATE TABLE empty_table (id INTEGER PRIMARY KEY, data TEXT)")
+        conn.commit()
+        conn.close()
+
+        show_single_table_info(str(db_path), "empty_table")
+        captured = capsys.readouterr()
+
+        assert "Records: 0" in captured.out
+        assert "no data to analyze" in captured.out
