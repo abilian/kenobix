@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.8.1] - 2025-12-17
+
+### Added
+- **Flexible database specification** - Multiple ways to specify the database:
+  - `-d/--database` option (works before or after command)
+  - `KENOBIX_DATABASE` environment variable
+  - Auto-detection: single `.db` file in current directory
+- **Pseudo-schema inference** for `kenobix info -t TABLE`:
+  - Infers field types from actual JSON data (string, integer, number, boolean, array, object)
+  - Shows field presence percentage (e.g., "80% present" for optional fields)
+  - Marks indexed fields with `[indexed]`
+  - `-v` shows sample values for each field
+  - `-vv` shows underlying SQLite schema and indexes
+- `--compact` option for `dump` command - outputs minified JSON
+- `-q/--quiet` option - suppresses non-essential output
+
+### Testing
+- 35 new tests for database resolution, pseudo-schema, and new options
+- Total test count: 307 tests
+
+
 ## [0.8.0] - 2025-12-17
 
 ### Added

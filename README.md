@@ -10,6 +10,7 @@ Based on [KenobiDB](https://github.com/patx/kenobi) by Harrison Erd, enhanced wi
 
 - [Why KenobiX?](#why-kenobix)
 - [Features](#features)
+- [Command-Line Interface](#command-line-interface)
 - [Performance Benchmarks](#performance-benchmarks)
 - [ACID Compliance](#acid-compliance)
 - [Documentation](#documentation)
@@ -82,6 +83,87 @@ db.update('user_id', 123, {'status': 'active'})
 - **Cursor Pagination** - Efficient pagination for large datasets
 - **Query Analysis** - Built-in `explain()` for optimization
 - **Zero Runtime Dependencies** - Only Python stdlib (cattrs optional for ODM)
+- **Command-Line Interface** - Inspect and dump databases from the terminal
+
+## Command-Line Interface
+
+KenobiX includes a CLI tool for database inspection and data export:
+
+```bash
+# Dump entire database to JSON
+kenobix dump -d myapp.db
+
+# Dump specific table to file
+kenobix dump -d myapp.db -t users -o users.json
+
+# Show database info
+kenobix info -d myapp.db
+
+# Show info for a specific table
+kenobix info -d myapp.db -t users
+
+# Detailed info with column definitions
+kenobix info -d myapp.db -vv
+```
+
+**Database specification** (in order of precedence):
+1. `-d/--database` option: `kenobix dump -d myapp.db`
+2. Environment variable: `KENOBIX_DATABASE=myapp.db kenobix dump`
+3. Auto-detection: single `.db` file in current directory
+
+**Options work before or after command:**
+```bash
+kenobix -d myapp.db dump -t users    # -d before command
+kenobix dump -d myapp.db -t users    # -d after command
+```
+
+**Available commands:**
+
+| Command | Description |
+|---------|-------------|
+| `dump` | Export database contents as JSON |
+| `info` | Display database information |
+
+**Common options:**
+
+| Option | Description |
+|--------|-------------|
+| `-d, --database` | Path to database file |
+| `-v, --verbose` | Increase verbosity (repeatable: `-v`, `-vv`) |
+| `-q, --quiet` | Suppress non-essential output |
+
+**Dump-specific options:**
+
+| Option | Description |
+|--------|-------------|
+| `-o, --output` | Write to file instead of stdout |
+| `-t, --table` | Dump only specified table |
+| `--compact` | Output minified JSON |
+
+**Info-specific options:**
+
+| Option | Description |
+|--------|-------------|
+| `-t, --table` | Show detailed info with pseudo-schema for specified table |
+
+**Example: Single table info with pseudo-schema**
+
+```bash
+$ kenobix info -d myapp.db -t users
+Database: myapp.db
+
+Table: users
+Records: 1,234
+Indexed fields: email, name
+
+Pseudo-schema (inferred from 100 records):
+  active: boolean (95% present)
+  age: integer (80% present)
+  email: string [indexed]
+  metadata: object (15% present)
+  name: string [indexed]
+  tags: array (30% present)
+```
 
 ## Performance Benchmarks
 
