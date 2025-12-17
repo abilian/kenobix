@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Tests for KenobiX ODM RelatedSet (one-to-many relationships).
 
@@ -7,7 +6,7 @@ Tests the RelatedSet descriptor for reverse foreign key relationships.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import pytest
 

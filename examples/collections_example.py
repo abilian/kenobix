@@ -227,8 +227,18 @@ def example_4_ecommerce_application():
 
             # Insert order items
             order_items.insert_many([
-                {"order_id": 1001, "product_id": 101, "quantity": 1, "price": 999.99},
-                {"order_id": 1001, "product_id": 102, "quantity": 1, "price": 29.99},
+                {
+                    "order_id": 1001,
+                    "product_id": 101,
+                    "quantity": 1,
+                    "price": 999.99,
+                },
+                {
+                    "order_id": 1001,
+                    "product_id": 102,
+                    "quantity": 1,
+                    "price": 29.99,
+                },
             ])
 
         print("Order 1001 created with 2 items")

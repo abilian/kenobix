@@ -11,7 +11,6 @@ Tests cover:
 
 from dataclasses import dataclass
 
-import cattrs
 import pytest
 
 from kenobix import Document, KenobiX

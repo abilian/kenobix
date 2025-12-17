@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Concurrency tests for KenobiX.
 
@@ -14,7 +13,6 @@ from __future__ import annotations
 
 import multiprocessing
 import time
-from pathlib import Path
 
 import pytest
 

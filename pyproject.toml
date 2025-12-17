@@ -50,6 +50,7 @@ dev = [
     "pytest>=8.3.4",
     "pytest-coverage>=0.0",
     "coverage>=7.10.7",
+    "ty>=0.0.2",
 ]
 
 [project.scripts]

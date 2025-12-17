@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Comprehensive ACID Compliance Tests for KenobiX
 

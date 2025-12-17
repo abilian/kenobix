@@ -38,7 +38,6 @@ Example:
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import fields, is_dataclass
 from typing import TYPE_CHECKING, Any, ClassVar, Self, TypeVar, overload
 
