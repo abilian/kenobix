@@ -43,15 +43,15 @@ dependencies = [
 dev = [
     # Linting
     "ruff>=0.14.0",
-    "pyrefly>=0.36.2",
+    # "pyrefly>=0.36.2",
+    "ty>=0.0.2",
+    "mypy>=1.19.1",
     "pre-commit>=4.3.0",
     # Tests
     "nox>=2025.5.1",
     "pytest>=8.3.4",
     "pytest-coverage>=0.0",
     "coverage>=7.10.7",
-    "ty>=0.0.2",
-    "mypy>=1.19.1",
 ]
 
 [project.scripts]
@@ -72,6 +72,7 @@ build-backend = "uv_build"
 # Pytest
 #
 [tool.pytest.ini_options]
+addopts = "-q --tb=short"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
 ]

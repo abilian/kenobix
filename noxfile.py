@@ -1,4 +1,4 @@
-"""Nox configuration for Prezo."""
+"""Nox configuration for Kenobix."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ def check(session: nox.Session) -> None:
     # Type check
     session.run("mypy", "src")
     session.run("ty", "check", "src")
-    session.run("pyrefly", "check", "src")
+    session.run("ty", "check", "src")
 
     # Tests
     session.run("pytest", "tests", *session.posargs)
