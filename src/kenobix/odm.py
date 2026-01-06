@@ -53,6 +53,109 @@ if TYPE_CHECKING:
 T = TypeVar("T", bound="Document")
 
 
+# Supported lookup operators for filter queries
+LOOKUP_OPERATORS = {
+    "exact",  # field = value (default)
+    "in",  # field IN (value1, value2, ...)
+    "gt",  # field > value
+    "gte",  # field >= value
+    "lt",  # field < value
+    "lte",  # field <= value
+    "ne",  # field != value
+    "like",  # field LIKE value
+    "isnull",  # field IS NULL / IS NOT NULL
+}
+
+
+def _parse_filter_key(key: str) -> tuple[str, str]:
+    """
+    Parse a filter key into field name and lookup operator.
+
+    Args:
+        key: Filter key, e.g., "age__gt" or "name"
+
+    Returns:
+        Tuple of (field_name, lookup_operator)
+
+    Examples:
+        >>> _parse_filter_key("age__gt")
+        ("age", "gt")
+        >>> _parse_filter_key("name")
+        ("name", "exact")
+        >>> _parse_filter_key("user__status")  # Not a lookup, treated as field
+        ("user__status", "exact")
+    """
+    if "__" in key:
+        # Split from the right to handle field names with underscores
+        parts = key.rsplit("__", 1)
+        field, maybe_lookup = parts[0], parts[1]
+        if maybe_lookup in LOOKUP_OPERATORS:
+            return field, maybe_lookup
+    return key, "exact"
+
+
+def _build_filter_condition(
+    field: str,
+    lookup: str,
+    value: Any,
+    indexed_fields: set[str],
+    sanitize_fn: Any,
+) -> tuple[str, list[Any]]:
+    """
+    Build a SQL WHERE condition for a filter.
+
+    Args:
+        field: Field name
+        lookup: Lookup operator (e.g., "exact", "gt", "in")
+        value: Filter value
+        indexed_fields: Set of indexed field names
+        sanitize_fn: Function to sanitize field names for SQL
+
+    Returns:
+        Tuple of (sql_condition, params_list)
+
+    Raises:
+        ValueError: For invalid lookup operators or values
+    """
+    # Determine column reference
+    if field in indexed_fields:
+        col_ref = sanitize_fn(field)
+    else:
+        col_ref = f"json_extract(data, '$.{field}')"
+
+    # Simple operators with single parameter
+    simple_ops = {
+        "exact": "=",
+        "gt": ">",
+        "gte": ">=",
+        "lt": "<",
+        "lte": "<=",
+        "ne": "!=",
+        "like": "LIKE",
+    }
+
+    if lookup in simple_ops:
+        return f"{col_ref} {simple_ops[lookup]} ?", [value]
+
+    if lookup == "in":
+        if not isinstance(value, (list, tuple, set)):
+            msg = f"__in lookup requires a list/tuple/set, got {type(value).__name__}"
+            raise ValueError(msg)
+        if not value:
+            # Empty list - return condition that matches nothing
+            return "1 = 0", []
+        placeholders = ", ".join("?" * len(value))
+        return f"{col_ref} IN ({placeholders})", list(value)
+
+    if lookup == "isnull":
+        if value:
+            return f"{col_ref} IS NULL", []
+        return f"{col_ref} IS NOT NULL", []
+
+    msg = f"Unknown lookup operator: {lookup}"
+    raise ValueError(msg)
+
+
 class Document:
     """
     Base class for ODM models.
@@ -439,12 +542,19 @@ class Document:
             indexed_fields = collection.get_indexed_fields()
 
             for key, value in filters.items():
-                if key in indexed_fields:
-                    safe_field = db._sanitize_field_name(key)
-                    where_parts.append(f"{safe_field} = ?")
-                else:
-                    where_parts.append(f"json_extract(data, '$.{key}') = ?")
-                params.append(value)
+                # Parse lookup operator from key (e.g., "age__gt" -> ("age", "gt"))
+                field, lookup = _parse_filter_key(key)
+
+                # Build SQL condition for this filter
+                condition, condition_params = _build_filter_condition(
+                    field=field,
+                    lookup=lookup,
+                    value=value,
+                    indexed_fields=indexed_fields,
+                    sanitize_fn=db._sanitize_field_name,
+                )
+                where_parts.append(condition)
+                params.extend(condition_params)
 
             where_clause = " AND ".join(where_parts)
             if limit is None:

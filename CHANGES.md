@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [Unreleased]
+
+### Added
+- **Query Lookup Operators** - Django-style filter operators for ODM:
+  - `__gt`, `__gte`, `__lt`, `__lte` - Comparison operators
+  - `__ne` - Not equal
+  - `__in` - Membership in list/tuple/set
+  - `__like` - SQL LIKE pattern matching
+  - `__isnull` - NULL checking
+  - Example: `User.filter(age__gte=18, status__in=["active", "pending"])`
+
+### Testing
+- 55 new tests for lookup operators
+- Total test count: 362 tests
+
+
 ## [0.8.1] - 2025-12-17
 
 ### Added

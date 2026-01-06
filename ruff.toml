@@ -42,4 +42,6 @@ lint.extend-ignore = [
 ]
 "tests/**/*.py" = [
     "RUF012",  # Meta class indexed_fields is intentionally mutable class attribute
+    "N806",    # Variable in function should be lowercase (e.g., Product = setup_models)
+    "PLC2701", # Private name import (e.g., _parse_filter_key for testing)
 ]

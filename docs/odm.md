@@ -181,6 +181,50 @@ User.filter(age=30)                       # Uses idx_age
 User.filter(role="admin")                 # Uses json_extract
 ```
 
+### Query Lookup Operators
+
+The ODM supports Django-style lookup operators for advanced filtering:
+
+```python
+# Comparison operators
+User.filter(age__gt=18)           # age > 18
+User.filter(age__gte=21)          # age >= 21
+User.filter(age__lt=65)           # age < 65
+User.filter(age__lte=30)          # age <= 30
+User.filter(status__ne="banned")  # status != "banned"
+
+# Membership
+User.filter(role__in=["admin", "moderator"])
+User.filter(category__in={"fruit", "vegetable"})
+
+# Pattern matching (SQL LIKE)
+User.filter(name__like="A%")      # Names starting with 'A'
+User.filter(email__like="%@gmail.com")  # Gmail addresses
+User.filter(name__like="%son%")   # Names containing 'son'
+
+# NULL checking
+User.filter(bio__isnull=True)     # bio IS NULL
+User.filter(email__isnull=False)  # email IS NOT NULL
+
+# Combine multiple lookups
+User.filter(age__gte=18, age__lt=65, active=True)
+User.filter(role__in=["admin", "mod"], status__ne="suspended")
+```
+
+**Available Lookup Operators:**
+
+| Operator | SQL Equivalent | Example |
+|----------|---------------|---------|
+| `__exact` | `=` | `name__exact="Alice"` (same as `name="Alice"`) |
+| `__gt` | `>` | `age__gt=18` |
+| `__gte` | `>=` | `age__gte=21` |
+| `__lt` | `<` | `price__lt=100` |
+| `__lte` | `<=` | `price__lte=50` |
+| `__ne` | `!=` | `status__ne="inactive"` |
+| `__in` | `IN (...)` | `category__in=["a", "b"]` |
+| `__like` | `LIKE` | `name__like="J%"` |
+| `__isnull` | `IS NULL` / `IS NOT NULL` | `bio__isnull=True` |
+
 ### Multiple Models
 
 ```python

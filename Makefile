@@ -18,6 +18,7 @@ lint:
 	ruff check
 	ty check src
 	ruff format --check
+	mypy src
 
 format:
 	ruff format
