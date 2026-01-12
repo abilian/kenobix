@@ -18,6 +18,7 @@ lint:
 	ruff check
 	ty check src
 	ruff format --check
+	pyrefly check src
 	mypy src
 
 format:
