@@ -1,10 +1,10 @@
 """
 KenobiX - High-Performance Document Database
 
-A SQLite3-backed document database with proper indexing for 15-665x faster operations.
+A document database with proper indexing supporting SQLite and PostgreSQL backends.
 
 Based on KenobiDB by Harrison Erd (https://github.com/patx/kenobi)
-Enhanced with SQLite3 JSON optimizations and generated column indexes.
+Enhanced with JSON optimizations and generated column indexes.
 
 Key features:
 1. Generated columns with indexes for specified fields (15-53x faster searches)
@@ -15,6 +15,7 @@ Key features:
 6. 80-665x faster update operations
 7. Multiple collections (MongoDB-style)
 8. Full ACID transactions
+9. Multiple database backends (SQLite, PostgreSQL)
 
 Copyright (c) 2025 KenobiX Contributors
 Original KenobiDB Copyright (c) Harrison Erd
@@ -24,30 +25,77 @@ Licensed under BSD-3-Clause
 from __future__ import annotations
 
 import contextlib
-import re
-import sqlite3
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from threading import RLock
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+from .backends import SQLiteBackend
 from .collection import Collection
+
+if TYPE_CHECKING:
+    from .backends.base import DatabaseBackend
+
+
+def _create_backend(connection_string: str) -> DatabaseBackend:
+    """
+    Create appropriate backend based on connection string.
+
+    Args:
+        connection_string: Database connection string or file path
+
+    Returns:
+        DatabaseBackend instance
+
+    Examples:
+        _create_backend("mydb.db")  # SQLite file
+        _create_backend(":memory:")  # SQLite in-memory
+        _create_backend("postgresql://user:pass@host/db")  # PostgreSQL
+    """
+    # Convert Path objects to string
+    if isinstance(connection_string, Path):
+        connection_string = str(connection_string)
+
+    # Check for PostgreSQL URL
+    if connection_string.startswith(("postgresql://", "postgres://")):
+        try:
+            # Import locally to allow using SQLite without psycopg2 installed
+            from .backends.postgres import (  # noqa: PLC0415
+                PostgreSQLBackend,
+                parse_postgres_url,
+            )
+        except ImportError as e:
+            msg = (
+                "PostgreSQL support requires psycopg2. "
+                "Install with: uv add kenobix[postgres]"
+            )
+            raise ImportError(msg) from e
+
+        params = parse_postgres_url(connection_string)
+        return PostgreSQLBackend(**params)
+
+    # Default to SQLite
+    return SQLiteBackend(connection_string)
 
 
 class KenobiX:
     """
-    KenobiX - High-performance document database with SQLite3 JSON optimization.
+    KenobiX - High-performance document database with JSON optimization.
 
     Performance improvements over basic document stores:
     - 15-53x faster searches on indexed fields
     - 80-665x faster update operations
-    - Minimal storage overhead (VIRTUAL generated columns)
+    - Minimal storage overhead (VIRTUAL generated columns for SQLite)
     - Automatic index usage with fallback to json_extract
     - Multi-collection support (MongoDB-style)
 
     Example:
-        # Single collection (backward compatible)
+        # SQLite (default)
         db = KenobiX('test.db', indexed_fields=['name', 'age'])
         db.insert({'name': 'Alice', 'age': 30})
+
+        # PostgreSQL
+        db = KenobiX('postgresql://user:pass@localhost/mydb')
 
         # Multiple collections
         users = db.collection('users', indexed_fields=['user_id', 'email'])
@@ -63,35 +111,75 @@ class KenobiX:
             db['orders'].insert({'order_id': 101, 'user_id': 3})
     """
 
-    def __init__(self, file: str, indexed_fields: list[str] | None = None) -> None:
+    def __init__(
+        self,
+        connection: str | None = None,
+        indexed_fields: list[str] | None = None,
+        *,
+        backend: DatabaseBackend | None = None,
+        file: str | None = None,  # Deprecated, use connection
+    ) -> None:
         """
         Initialize the database with optional field indexing.
 
         Args:
-            file: Path to SQLite database file
+            connection: Connection string or file path:
+                - SQLite: file path like 'test.db' or ':memory:'
+                - PostgreSQL: URL like 'postgresql://user:pass@host/dbname'
             indexed_fields: List of document fields to create indexes for
                           (applies to default 'documents' collection)
                           Example: ['name', 'age', 'email']
-        """
-        self.file = file
-        self._write_lock = RLock()  # Shared across all collections
-        self._connection = sqlite3.connect(self.file, check_same_thread=False)
-        self.executor = ThreadPoolExecutor(max_workers=5)
+            backend: Pre-configured backend instance (advanced usage)
+            file: Deprecated, use connection parameter
 
-        # Transaction state (shared across all collections)
-        self._in_transaction = False
-        self._savepoint_counter = 0
+        Examples:
+            # SQLite (file-based)
+            db = KenobiX('mydb.db', indexed_fields=['name'])
+
+            # SQLite (in-memory)
+            db = KenobiX(':memory:')
+
+            # PostgreSQL
+            db = KenobiX('postgresql://user:pass@localhost/mydb')
+
+            # Explicit backend
+            from kenobix.backends import PostgreSQLBackend
+            backend = PostgreSQLBackend(host='localhost', database='mydb')
+            db = KenobiX(backend=backend)
+        """
+        # Handle deprecated 'file' parameter
+        if file is not None and connection is None:
+            connection = file
+
+        # Validate parameters
+        if backend is None and connection is None:
+            msg = "Either 'connection' or 'backend' must be provided"
+            raise ValueError(msg)
+
+        # Create or use provided backend
+        if backend is not None:
+            self._backend = backend
+        else:
+            assert connection is not None
+            self._backend = _create_backend(connection)
+
+        # Store connection string for reference (backward compatibility)
+        self.file = connection or ""
+
+        # Connect to database
+        self._backend.connect()
+        self._backend.add_regexp_support()
+        self._backend.enable_wal_mode()
+
+        # Shared write lock for all collections
+        self._write_lock = RLock()
+
+        # Thread pool for async operations
+        self.executor = ThreadPoolExecutor(max_workers=5)
 
         # Collection management
         self._collections: dict[str, Collection] = {}
         self._default_collection_name = "documents"
-
-        # Add REGEXP support
-        self._add_regexp_support(self._connection)
-
-        # Enable WAL mode
-        self._connection.execute("PRAGMA journal_mode=WAL")
-        self._connection.commit()
 
         # Always create default collection eagerly (backward compatibility)
         # This prevents table creation from happening inside transactions
@@ -101,14 +189,34 @@ class KenobiX:
         # For backward compatibility: expose _indexed_fields from default collection
         self._indexed_fields = self._default_collection._indexed_fields
 
-    @staticmethod
-    def _add_regexp_support(conn) -> None:
-        """Add REGEXP function support."""
+    # ==================================================================================
+    # Backend Access (for internal use and Collection)
+    # ==================================================================================
 
-        def regexp(pattern, value):
-            return re.search(pattern, value) is not None
+    @property
+    def _connection(self) -> Any:
+        """
+        Get underlying database connection.
 
-        conn.create_function("REGEXP", 2, regexp)
+        For backward compatibility with code that accesses _connection directly.
+        New code should use backend methods.
+        """
+        return self._backend.connection
+
+    @property
+    def _in_transaction(self) -> bool:
+        """Check if currently in a transaction."""
+        return self._backend.in_transaction
+
+    @_in_transaction.setter
+    def _in_transaction(self, value: bool) -> None:
+        """Set transaction state."""
+        self._backend.in_transaction = value
+
+    @property
+    def dialect(self):
+        """Get the SQL dialect for this database."""
+        return self._backend.dialect
 
     @staticmethod
     def _sanitize_field_name(field: str) -> str:
@@ -125,8 +233,7 @@ class KenobiX:
 
         For backward compatibility with ODM code that accesses this method.
         """
-        if not self._in_transaction:
-            self._connection.commit()
+        self._backend.maybe_commit()
 
     # ==================================================================================
     # Collection Management
@@ -175,11 +282,9 @@ class KenobiX:
         Returns:
             List of collection names
         """
-        cursor = self._connection.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' "
-            "AND name NOT LIKE 'sqlite_%'"
-        )
-        return [row[0] for row in cursor.fetchall()]
+        query = self._backend.dialect.list_tables_query()
+        cursor = self._backend.execute(query)
+        return [row[0] for row in self._backend.fetchall(cursor)]
 
     def _get_default_collection(self) -> Collection:
         """
@@ -443,18 +548,20 @@ class KenobiX:
         Returns:
             Dict with database size, collection count, document count, etc.
         """
-        cursor = self._connection.execute(
-            "SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()"
-        )
-        db_size = cursor.fetchone()[0]
+        # Get database size
+        size_query = self._backend.dialect.database_size_query()
+        cursor = self._backend.execute(size_query)
+        row = self._backend.fetchone(cursor)
+        db_size = row[0] if row else 0
 
         collections = self.collections()
 
-        # For backward compatibility: get document count and indexed fields from default collection
-        cursor = self._connection.execute(
-            f"SELECT COUNT(*) FROM {self._default_collection_name}"
-        )
-        doc_count = cursor.fetchone()[0]
+        # For backward compatibility: get document count from default collection
+        count_query = f"SELECT COUNT(*) FROM {self._default_collection_name}"
+        cursor = self._backend.execute(count_query)
+        row = self._backend.fetchone(cursor)
+        doc_count = row[0] if row else 0
+
         indexed_fields = list(self._default_collection.get_indexed_fields())
 
         return {
@@ -464,6 +571,7 @@ class KenobiX:
             "collection_count": len(collections),
             "collections": collections,
             "wal_mode": True,
+            "backend": type(self._backend).__name__,
         }
 
     def create_index(self, field: str) -> bool:
@@ -508,8 +616,7 @@ class KenobiX:
             raise RuntimeError(msg)
 
         with self._write_lock:
-            self._connection.execute("BEGIN")
-            self._in_transaction = True
+            self._backend.begin_transaction()
 
     def commit(self) -> None:
         """
@@ -525,9 +632,9 @@ class KenobiX:
             raise RuntimeError(msg)
 
         with self._write_lock:
-            self._connection.commit()
+            self._backend.commit()
             self._in_transaction = False
-            self._savepoint_counter = 0
+            self._backend.reset_savepoint_counter()
 
     def rollback(self) -> None:
         """
@@ -543,9 +650,9 @@ class KenobiX:
             raise RuntimeError(msg)
 
         with self._write_lock:
-            self._connection.rollback()
+            self._backend.rollback()
             self._in_transaction = False
-            self._savepoint_counter = 0
+            self._backend.reset_savepoint_counter()
 
     def savepoint(self, name: str | None = None) -> str:
         """
@@ -575,11 +682,10 @@ class KenobiX:
             raise RuntimeError(msg)
 
         if name is None:
-            self._savepoint_counter += 1
-            name = f"sp_{self._savepoint_counter}"
+            name = self._backend.new_savepoint_name()
 
         with self._write_lock:
-            self._connection.execute(f"SAVEPOINT {name}")
+            self._backend.create_savepoint(name)
 
         return name
 
@@ -598,7 +704,7 @@ class KenobiX:
             raise RuntimeError(msg)
 
         with self._write_lock:
-            self._connection.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+            self._backend.rollback_to_savepoint(savepoint)
 
     def release_savepoint(self, savepoint: str) -> None:
         """
@@ -615,7 +721,7 @@ class KenobiX:
             raise RuntimeError(msg)
 
         with self._write_lock:
-            self._connection.execute(f"RELEASE SAVEPOINT {savepoint}")
+            self._backend.release_savepoint(savepoint)
 
     def transaction(self):
         """
@@ -643,7 +749,7 @@ class KenobiX:
         """Shutdown executor and close connection."""
         self.executor.shutdown()
         with self._write_lock:
-            self._connection.close()
+            self._backend.close()
 
 
 class Transaction:
@@ -689,9 +795,9 @@ class Transaction:
             else:
                 self.db.commit()
             return True
-        except sqlite3.Error:
+        except Exception:
             # Error during commit/rollback - ensure we rollback
             if not self._savepoint and self.db._in_transaction:
-                with contextlib.suppress(sqlite3.Error):
+                with contextlib.suppress(Exception):
                     self.db.rollback()
             raise

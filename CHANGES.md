@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [Unreleased]
+
+### Added
+- **PostgreSQL Backend Support** - KenobiX now supports PostgreSQL in addition to SQLite:
+  - Connection via URL: `KenobiX('postgresql://user:pass@host/db')`
+  - Uses JSONB for document storage with GIN index support
+  - STORED generated columns for indexed fields
+  - Native regex support via `~` operator
+  - Connection pooling via psycopg2.pool
+  - Install with: `uv add kenobix[postgres]`
+
+- **Database Backend Abstraction** - New `backends` module:
+  - `DatabaseBackend` protocol for implementing database backends
+  - `SQLDialect` protocol for database-specific SQL syntax
+  - `SQLiteBackend` - Default backend (no external dependencies)
+  - `PostgreSQLBackend` - Optional PostgreSQL support (requires psycopg2)
+
+### Changed
+- Refactored core database layer to use backend abstraction
+- `KenobiX` constructor now accepts `connection` parameter (string or Path)
+- Added `backend` parameter for explicit backend configuration
+- `stats()` now includes `backend` field indicating backend type
+
+### Testing
+- 25 new tests for backend abstraction layer
+- PostgreSQL dialect and backend tests (skipped if psycopg2 not installed)
+- Total test count: 397 tests
+
+
 ## [0.9.0] - 2026-01-06
 
 ### Added

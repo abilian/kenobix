@@ -7,7 +7,6 @@ Each collection operates on its own table with its own schema and indexes.
 from __future__ import annotations
 
 import json
-import sqlite3
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -40,18 +39,24 @@ class Collection:
         self.name = name
         self._indexed_fields: set[str] = set(indexed_fields or [])
 
-        # Share connection and locks from parent database
-        self._connection = db._connection
+        # Access backend through parent database
+        self._backend = db._backend
         self._write_lock = db._write_lock
 
         # Initialize table
         self._initialize_table()
 
+    @property
+    def _dialect(self):
+        """Get SQL dialect from backend."""
+        return self._backend.dialect
+
     def _initialize_table(self) -> None:
         """Create table with generated columns for indexed fields."""
         with self._write_lock:
             # Build CREATE TABLE with generated columns
-            columns = ["id INTEGER PRIMARY KEY AUTOINCREMENT", "data TEXT NOT NULL"]
+            pk_col = self._dialect.auto_increment_pk()
+            columns = [pk_col, "data TEXT NOT NULL"]
 
             # Add generated columns for indexed fields
             # Skip "id" and "_id" as they're reserved for the primary key
@@ -59,15 +64,14 @@ class Collection:
                 if field in ("id", "_id"):
                     continue  # Skip reserved column names
                 safe_field = self._sanitize_field_name(field)
-                columns.append(
-                    f"{safe_field} TEXT GENERATED ALWAYS AS "
-                    f"(json_extract(data, '$.{field}')) VIRTUAL"
-                )
+                json_expr = self._dialect.json_extract("data", field)
+                gen_col = self._dialect.generated_column(safe_field, json_expr)
+                columns.append(gen_col)
 
             create_table = (
                 f"CREATE TABLE IF NOT EXISTS {self.name} (\n    {', '.join(columns)}\n)"
             )
-            self._connection.execute(create_table)
+            self._backend.execute(create_table)
 
             # Create indexes on generated columns
             # Skip "id" and "_id" as they're reserved for the primary key
@@ -75,7 +79,7 @@ class Collection:
                 if field in ("id", "_id"):
                     continue  # Skip reserved column names
                 safe_field = self._sanitize_field_name(field)
-                self._connection.execute(
+                self._backend.execute(
                     f"CREATE INDEX IF NOT EXISTS {self.name}_idx_{safe_field} "
                     f"ON {self.name}({safe_field})"
                 )
@@ -90,8 +94,11 @@ class Collection:
 
     def _maybe_commit(self) -> None:
         """Commit if not in a transaction (delegates to parent database)."""
-        if not self.db._in_transaction:
-            self._connection.commit()
+        self._backend.maybe_commit()
+
+    def _placeholder(self) -> str:
+        """Get parameter placeholder for current dialect."""
+        return self._dialect.placeholder
 
     def insert(self, document: dict[str, Any]) -> int:
         """
@@ -111,13 +118,14 @@ class Collection:
             raise TypeError(msg)
 
         with self._write_lock:
-            cursor = self._connection.execute(
-                f"INSERT INTO {self.name} (data) VALUES (?)",
-                (json.dumps(document),),
-            )
+            query = self._dialect.insert_returning_id(self.name)
+            cursor = self._backend.execute(query, (json.dumps(document),))
+
+            # Get the inserted ID
+            doc_id = self._backend.get_last_insert_id(cursor)
+
             self._maybe_commit()
-            assert cursor.lastrowid is not None
-            return cursor.lastrowid
+            return doc_id
 
     def insert_many(self, document_list: list[dict[str, Any]]) -> list[int]:
         """
@@ -139,12 +147,16 @@ class Collection:
             raise TypeError(msg)
 
         with self._write_lock:
-            cursor = self._connection.execute(f"SELECT MAX(id) FROM {self.name}")
-            last_id = cursor.fetchone()[0] or 0
+            # Get current max ID
+            cursor = self._backend.execute(f"SELECT MAX(id) FROM {self.name}")
+            row = self._backend.fetchone(cursor)
+            last_id = row[0] if row and row[0] else 0
 
-            self._connection.executemany(
-                f"INSERT INTO {self.name} (data) VALUES (?)",
-                [(json.dumps(doc),) for doc in document_list],
+            # Insert all documents
+            ph = self._placeholder()
+            query = f"INSERT INTO {self.name} (data) VALUES ({ph})"
+            self._backend.executemany(
+                query, [(json.dumps(doc),) for doc in document_list]
             )
             self._maybe_commit()
 
@@ -171,18 +183,19 @@ class Collection:
             msg = "value cannot be None"
             raise ValueError(msg)
 
+        ph = self._placeholder()
+
         with self._write_lock:
             if key in self._indexed_fields:
                 safe_field = self._sanitize_field_name(key)
-                query = f"DELETE FROM {self.name} WHERE {safe_field} = ?"
-                result = self._connection.execute(query, (value,))
+                query = f"DELETE FROM {self.name} WHERE {safe_field} = {ph}"
+                cursor = self._backend.execute(query, (value,))
             else:
-                query = (
-                    f"DELETE FROM {self.name} WHERE json_extract(data, '$.' || ?) = ?"
-                )
-                result = self._connection.execute(query, (key, value))
+                json_expr = self._dialect.json_extract("data", key)
+                query = f"DELETE FROM {self.name} WHERE {json_expr} = {ph}"
+                cursor = self._backend.execute(query, (value,))
             self._maybe_commit()
-            return result.rowcount
+            return self._backend.get_rowcount(cursor)
 
     def update(self, id_key: str, id_value: Any, new_dict: dict[str, Any]) -> bool:
         """
@@ -210,24 +223,27 @@ class Collection:
             msg = "id_value cannot be None"
             raise ValueError(msg)
 
+        ph = self._placeholder()
+
         with self._write_lock:
             if id_key in self._indexed_fields:
                 safe_field = self._sanitize_field_name(id_key)
-                select_query = f"SELECT data FROM {self.name} WHERE {safe_field} = ?"
-                update_query = f"UPDATE {self.name} SET data = ? WHERE {safe_field} = ?"
-                cursor = self._connection.execute(select_query, (id_value,))
-            else:
                 select_query = (
-                    f"SELECT data FROM {self.name} "
-                    "WHERE json_extract(data, '$.' || ?) = ?"
+                    f"SELECT data FROM {self.name} WHERE {safe_field} = {ph}"
                 )
                 update_query = (
-                    f"UPDATE {self.name} SET data = ? "
-                    "WHERE json_extract(data, '$.' || ?) = ?"
+                    f"UPDATE {self.name} SET data = {ph} WHERE {safe_field} = {ph}"
                 )
-                cursor = self._connection.execute(select_query, (id_key, id_value))
+                cursor = self._backend.execute(select_query, (id_value,))
+            else:
+                json_expr = self._dialect.json_extract("data", id_key)
+                select_query = f"SELECT data FROM {self.name} WHERE {json_expr} = {ph}"
+                update_query = (
+                    f"UPDATE {self.name} SET data = {ph} WHERE {json_expr} = {ph}"
+                )
+                cursor = self._backend.execute(select_query, (id_value,))
 
-            documents = cursor.fetchall()
+            documents = self._backend.fetchall(cursor)
             if not documents:
                 return False
 
@@ -236,15 +252,7 @@ class Collection:
                 if not isinstance(document, dict):
                     continue
                 document.update(new_dict)
-
-                if id_key in self._indexed_fields:
-                    self._connection.execute(
-                        update_query, (json.dumps(document), id_value)
-                    )
-                else:
-                    self._connection.execute(
-                        update_query, (json.dumps(document), id_key, id_value)
-                    )
+                self._backend.execute(update_query, (json.dumps(document), id_value))
 
             self._maybe_commit()
             return True
@@ -257,7 +265,7 @@ class Collection:
             True upon successful purge
         """
         with self._write_lock:
-            self._connection.execute(f"DELETE FROM {self.name}")
+            self._backend.execute(f"DELETE FROM {self.name}")
             self._maybe_commit()
             return True
 
@@ -280,23 +288,26 @@ class Collection:
             msg = "Key must be a non-empty string"
             raise ValueError(msg)
 
+        ph = self._placeholder()
+
         # Check if field is indexed - if so, use direct column query
         if key in self._indexed_fields:
             safe_field = self._sanitize_field_name(key)
             query = (
-                f"SELECT data FROM {self.name} WHERE {safe_field} = ? LIMIT ? OFFSET ?"
+                f"SELECT data FROM {self.name} WHERE {safe_field} = {ph} "
+                f"LIMIT {ph} OFFSET {ph}"
             )
-            cursor = self._connection.execute(query, (value, limit, offset))
+            cursor = self._backend.execute(query, (value, limit, offset))
         else:
             # Fall back to json_extract (no index)
+            json_expr = self._dialect.json_extract("data", key)
             query = (
-                f"SELECT data FROM {self.name} "
-                "WHERE json_extract(data, '$.' || ?) = ? "
-                "LIMIT ? OFFSET ?"
+                f"SELECT data FROM {self.name} WHERE {json_expr} = {ph} "
+                f"LIMIT {ph} OFFSET {ph}"
             )
-            cursor = self._connection.execute(query, (key, value, limit, offset))
+            cursor = self._backend.execute(query, (value, limit, offset))
 
-        return [json.loads(row[0]) for row in cursor.fetchall()]
+        return [json.loads(row[0]) for row in self._backend.fetchall(cursor)]
 
     def search_optimized(self, **filters) -> list[dict]:
         """
@@ -311,6 +322,8 @@ class Collection:
         if not filters:
             return self.all()
 
+        ph = self._placeholder()
+
         # Build WHERE clause using indexed columns when possible
         where_parts: list[str] = []
         params: list[Any] = []
@@ -318,22 +331,24 @@ class Collection:
         for key, value in filters.items():
             if key in self._indexed_fields:
                 safe_field = self._sanitize_field_name(key)
-                where_parts.append(f"{safe_field} = ?")
+                where_parts.append(f"{safe_field} = {ph}")
             else:
-                where_parts.append(f"json_extract(data, '$.{key}') = ?")
+                json_expr = self._dialect.json_extract("data", key)
+                where_parts.append(f"{json_expr} = {ph}")
             params.append(value)
 
         where_clause = " AND ".join(where_parts)
         query = f"SELECT data FROM {self.name} WHERE {where_clause}"
 
-        cursor = self._connection.execute(query, params)
-        return [json.loads(row[0]) for row in cursor.fetchall()]
+        cursor = self._backend.execute(query, params)
+        return [json.loads(row[0]) for row in self._backend.fetchall(cursor)]
 
     def all(self, limit: int = 100, offset: int = 0) -> list[dict]:
         """Get all documents from this collection."""
-        query = f"SELECT data FROM {self.name} LIMIT ? OFFSET ?"
-        cursor = self._connection.execute(query, (limit, offset))
-        return [json.loads(row[0]) for row in cursor.fetchall()]
+        ph = self._placeholder()
+        query = f"SELECT data FROM {self.name} LIMIT {ph} OFFSET {ph}"
+        cursor = self._backend.execute(query, (limit, offset))
+        return [json.loads(row[0]) for row in self._backend.fetchall(cursor)]
 
     def all_cursor(self, after_id: int | None = None, limit: int = 100) -> dict:
         """
@@ -346,14 +361,19 @@ class Collection:
         Returns:
             Dict with 'documents', 'next_cursor', 'has_more'
         """
-        if after_id:
-            query = f"SELECT id, data FROM {self.name} WHERE id > ? ORDER BY id LIMIT ?"
-            cursor = self._connection.execute(query, (after_id, limit + 1))
-        else:
-            query = f"SELECT id, data FROM {self.name} ORDER BY id LIMIT ?"
-            cursor = self._connection.execute(query, (limit + 1,))
+        ph = self._placeholder()
 
-        rows = cursor.fetchall()
+        if after_id:
+            query = (
+                f"SELECT id, data FROM {self.name} WHERE id > {ph} "
+                f"ORDER BY id LIMIT {ph}"
+            )
+            cursor = self._backend.execute(query, (after_id, limit + 1))
+        else:
+            query = f"SELECT id, data FROM {self.name} ORDER BY id LIMIT {ph}"
+            cursor = self._backend.execute(query, (limit + 1,))
+
+        rows = self._backend.fetchall(cursor)
         has_more = len(rows) > limit
 
         if has_more:
@@ -393,13 +413,17 @@ class Collection:
             msg = "pattern must be a non-empty string"
             raise ValueError(msg)
 
+        ph = self._placeholder()
+        json_expr = self._dialect.json_extract("data", key)
+        regex_expr = self._dialect.regex_match(json_expr)
+
         query = f"""
             SELECT data FROM {self.name}
-            WHERE json_extract(data, '$.' || ?) REGEXP ?
-            LIMIT ? OFFSET ?
+            WHERE {regex_expr}
+            LIMIT {ph} OFFSET {ph}
         """
-        cursor = self._connection.execute(query, (key, pattern, limit, offset))
-        return [json.loads(row[0]) for row in cursor.fetchall()]
+        cursor = self._backend.execute(query, (pattern, limit, offset))
+        return [json.loads(row[0]) for row in self._backend.fetchall(cursor)]
 
     def find_any(self, key: str, value_list: list[Any]) -> list[dict]:
         """
@@ -415,7 +439,8 @@ class Collection:
         if not value_list:
             return []
 
-        placeholders = ", ".join(["?"] * len(value_list))
+        ph = self._placeholder()
+        placeholders = ", ".join([ph] * len(value_list))
 
         if key in self._indexed_fields:
             safe_field = self._sanitize_field_name(key)
@@ -424,16 +449,19 @@ class Collection:
                 FROM {self.name}
                 WHERE {safe_field} IN ({placeholders})
             """
-            cursor = self._connection.execute(query, value_list)
+            cursor = self._backend.execute(query, value_list)
         else:
+            # For non-indexed fields, use json_each for array values
+            # or direct json_extract for simple values
+            json_expr = self._dialect.json_extract("data", key)
             query = f"""
-                SELECT DISTINCT {self.name}.data
-                FROM {self.name}, json_each({self.name}.data, '$.' || ?)
-                WHERE json_each.value IN ({placeholders})
+                SELECT DISTINCT data
+                FROM {self.name}
+                WHERE {json_expr} IN ({placeholders})
             """
-            cursor = self._connection.execute(query, [key] + value_list)
+            cursor = self._backend.execute(query, value_list)
 
-        return [json.loads(row[0]) for row in cursor.fetchall()]
+        return [json.loads(row[0]) for row in self._backend.fetchall(cursor)]
 
     def find_all(self, key: str, value_list: list[Any]) -> list[dict]:
         """
@@ -449,19 +477,20 @@ class Collection:
         if not value_list:
             return []
 
-        placeholders = ", ".join(["?"] * len(value_list))
+        ph = self._placeholder()
+        placeholders = ", ".join([ph] * len(value_list))
+
+        # This query works with JSON arrays in the data
+        json_each_expr = self._dialect.json_array_each("data", f"$.{key}")
 
         query = f"""
             SELECT {self.name}.data
-            FROM {self.name}
-            WHERE (
-                SELECT COUNT(DISTINCT value)
-                FROM json_each({self.name}.data, '$.' || ?)
-                WHERE value IN ({placeholders})
-            ) = ?
+            FROM {self.name}, {json_each_expr} AS elems
+            GROUP BY {self.name}.id
+            HAVING COUNT(DISTINCT CASE WHEN elems.value IN ({placeholders}) THEN elems.value END) = {ph}
         """
-        cursor = self._connection.execute(query, [key] + value_list + [len(value_list)])
-        return [json.loads(row[0]) for row in cursor.fetchall()]
+        cursor = self._backend.execute(query, value_list + [len(value_list)])
+        return [json.loads(row[0]) for row in self._backend.fetchall(cursor)]
 
     def explain(self, operation: str, *args) -> list[tuple]:
         """
@@ -474,29 +503,32 @@ class Collection:
         Returns:
             List of query plan tuples from EXPLAIN QUERY PLAN
         """
+        ph = self._placeholder()
+
         if operation == "search":
             key, value = args[0], args[1]
             if key in self._indexed_fields:
                 safe_field = self._sanitize_field_name(key)
                 query = (
                     f"EXPLAIN QUERY PLAN SELECT data FROM {self.name} "
-                    f"WHERE {safe_field} = ?"
+                    f"WHERE {safe_field} = {ph}"
                 )
-                cursor = self._connection.execute(query, (value,))
+                cursor = self._backend.execute(query, (value,))
             else:
+                json_expr = self._dialect.json_extract("data", key)
                 query = (
                     f"EXPLAIN QUERY PLAN SELECT data FROM {self.name} "
-                    "WHERE json_extract(data, '$.' || ?) = ?"
+                    f"WHERE {json_expr} = {ph}"
                 )
-                cursor = self._connection.execute(query, (key, value))
+                cursor = self._backend.execute(query, (value,))
         elif operation == "all":
             query = f"EXPLAIN QUERY PLAN SELECT data FROM {self.name}"
-            cursor = self._connection.execute(query)
+            cursor = self._backend.execute(query)
         else:
             msg = f"Unknown operation: {operation}"
             raise ValueError(msg)
 
-        return cursor.fetchall()
+        return self._backend.fetchall(cursor)
 
     def get_indexed_fields(self) -> set[str]:
         """Return set of fields that have indexes."""
@@ -509,8 +541,9 @@ class Collection:
         Returns:
             Dict with document count, etc.
         """
-        cursor = self._connection.execute(f"SELECT COUNT(*) FROM {self.name}")
-        doc_count = cursor.fetchone()[0]
+        cursor = self._backend.execute(f"SELECT COUNT(*) FROM {self.name}")
+        row = self._backend.fetchone(cursor)
+        doc_count = row[0] if row else 0
 
         return {
             "collection": self.name,
@@ -538,18 +571,21 @@ class Collection:
         with self._write_lock:
             self._indexed_fields.add(field)
             safe_field = self._sanitize_field_name(field)
+            json_expr = self._dialect.json_extract("data", field)
+            gen_col = self._dialect.generated_column(safe_field, json_expr)
 
             try:
-                self._connection.execute(
-                    f"ALTER TABLE {self.name} ADD COLUMN {safe_field} TEXT "
-                    f"GENERATED ALWAYS AS (json_extract(data, '$.{field}')) VIRTUAL"
+                self._backend.execute(
+                    f"ALTER TABLE {self.name} ADD COLUMN {gen_col}"
                 )
-                self._connection.execute(
+                self._backend.execute(
                     f"CREATE INDEX {self.name}_idx_{safe_field} "
                     f"ON {self.name}({safe_field})"
                 )
                 self._maybe_commit()
                 return True
-            except sqlite3.OperationalError:
+            except Exception:  # noqa: BLE001
                 # Column already exists or can't be added
+                # Must catch broad exception to handle different database backends
+                self._indexed_fields.discard(field)
                 return False

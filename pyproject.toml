@@ -2,7 +2,7 @@
 name = "kenobix"
 version = "0.9.0"
 requires-python = ">=3.11"
-description = "Simple document database with SQLite3 JSON optimization, based on KenobiDB by Harrison Erd."
+description = "High-performance document database with SQLite and PostgreSQL backends, based on KenobiDB by Harrison Erd."
 readme = "README.md"
 
 classifiers = [
@@ -34,10 +34,14 @@ maintainers = [
     {name = "KenobiX Contributors"},
 ]
 
-# TODO: should be optional
+# TODO: cattrs should be optional
 dependencies = [
     "cattrs>=25.3.0",
 ]
+
+[project.optional-dependencies]
+postgres = ["psycopg2-binary>=2.9"]
+all = ["psycopg2-binary>=2.9"]
 
 [dependency-groups]
 dev = [
@@ -54,6 +58,9 @@ dev = [
     "coverage>=7.10.7",
     "pyrefly>=0.47.0",
 ]
+postgres = [
+    "psycopg2>=2.9.11",
+]
 
 [project.scripts]
 kenobix = "kenobix.cli:main"
@@ -69,8 +76,9 @@ kbx = "kenobix.cli:main"
 requires = ["uv-build>=0.8.4,<0.9.0"]
 build-backend = "uv_build"
 
+
 #
-# Pytest
+# Pytest & Coverage
 #
 [tool.pytest.ini_options]
 addopts = "-q --tb=short"
@@ -82,18 +90,25 @@ markers = [
 source_pkgs = ["kenobix"]
 branch = true
 disable_warnings = ["module-not-measured"]
+omit = [
+    # PostgreSQL backend requires running PostgreSQL server for full testing
+    "src/kenobix/backends/postgres.py",
+]
 
 [tool.coverage.report]
 exclude_lines = [
     "pragma: no cover",
     "@abc.abstractmethod",
     "@abc.abstractproperty",
+    "@abstractmethod",
     "if TYPE_CHECKING:",
     "if typing.TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "\\.\\.\\.",  # Protocol method stubs
 ]
 precision = 2
 ignore_errors = true
 skip_covered = true
 skip_empty = true
-fail_under = 88
+fail_under = 90
 show_missing = true
