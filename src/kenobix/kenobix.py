@@ -63,7 +63,7 @@ class KenobiX:
             db['orders'].insert({'order_id': 101, 'user_id': 3})
     """
 
-    def __init__(self, file: str, indexed_fields: list[str] | None = None):
+    def __init__(self, file: str, indexed_fields: list[str] | None = None) -> None:
         """
         Initialize the database with optional field indexing.
 
@@ -102,7 +102,7 @@ class KenobiX:
         self._indexed_fields = self._default_collection._indexed_fields
 
     @staticmethod
-    def _add_regexp_support(conn):
+    def _add_regexp_support(conn) -> None:
         """Add REGEXP function support."""
 
         def regexp(pattern, value):
@@ -119,7 +119,7 @@ class KenobiX:
         """
         return "".join(c if c.isalnum() else "_" for c in field)
 
-    def _maybe_commit(self):
+    def _maybe_commit(self) -> None:
         """
         Commit if not in a transaction.
 
@@ -485,7 +485,7 @@ class KenobiX:
     # Transaction Methods (Shared Across All Collections)
     # ==================================================================================
 
-    def begin(self):
+    def begin(self) -> None:
         """
         Begin a new transaction.
 
@@ -511,7 +511,7 @@ class KenobiX:
             self._connection.execute("BEGIN")
             self._in_transaction = True
 
-    def commit(self):
+    def commit(self) -> None:
         """
         Commit the current transaction.
 
@@ -529,7 +529,7 @@ class KenobiX:
             self._in_transaction = False
             self._savepoint_counter = 0
 
-    def rollback(self):
+    def rollback(self) -> None:
         """
         Rollback the current transaction.
 
@@ -583,7 +583,7 @@ class KenobiX:
 
         return name
 
-    def rollback_to(self, savepoint: str):
+    def rollback_to(self, savepoint: str) -> None:
         """
         Rollback to a specific savepoint.
 
@@ -600,7 +600,7 @@ class KenobiX:
         with self._write_lock:
             self._connection.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
 
-    def release_savepoint(self, savepoint: str):
+    def release_savepoint(self, savepoint: str) -> None:
         """
         Release a savepoint (commit it within the transaction).
 
@@ -639,7 +639,7 @@ class KenobiX:
     # Database Management
     # ==================================================================================
 
-    def close(self):
+    def close(self) -> None:
         """Shutdown executor and close connection."""
         self.executor.shutdown()
         with self._write_lock:
@@ -653,7 +653,7 @@ class Transaction:
     Provides automatic transaction management with commit/rollback.
     """
 
-    def __init__(self, db: KenobiX):
+    def __init__(self, db: KenobiX) -> None:
         """
         Initialize transaction context manager.
 

@@ -83,7 +83,7 @@ class ForeignKey(Generic[T]):
         model: type[T],
         optional: bool = False,
         related_field: str | None = None,
-    ):
+    ) -> None:
         """
         Initialize ForeignKey descriptor.
 
@@ -155,7 +155,7 @@ class ForeignKey(Generic[T]):
         related = self.model.get(**{self.related_field: fk_value})
 
         if related is None and not self.optional:
-            model_name = self.model.__name__  # type: ignore[misc]
+            model_name = self.model.__name__
             msg = f"Related {model_name} with {self.related_field}={fk_value} not found"
             raise ValueError(msg)
 
@@ -163,7 +163,7 @@ class ForeignKey(Generic[T]):
         setattr(instance, self.cache_attr, related)
         return related
 
-    def __set__(self, instance: Document, value: T | None):
+    def __set__(self, instance: Document, value: T | None) -> None:
         """
         Set related object and update foreign key field.
 
@@ -181,7 +181,7 @@ class ForeignKey(Generic[T]):
         # Handle None assignment
         if value is None:
             if not self.optional:
-                model_name = self.model.__name__  # type: ignore[misc]
+                model_name = self.model.__name__
                 msg = f"Cannot set {model_name} to None (not optional)"
                 raise ValueError(msg)
             setattr(instance, self.foreign_key_field, None)
@@ -217,7 +217,7 @@ class RelatedSetManager(Generic[T]):
         related_model: type[T],
         foreign_key_field: str,
         local_field: str,
-    ):
+    ) -> None:
         """
         Initialize RelatedSetManager.
 
@@ -406,7 +406,7 @@ class RelatedSet(Generic[T]):
         related_model: type[T],
         foreign_key_field: str,
         local_field: str | None = None,
-    ):
+    ) -> None:
         """
         Initialize RelatedSet descriptor.
 
@@ -464,7 +464,7 @@ class RelatedSet(Generic[T]):
 
         return manager
 
-    def __set__(self, instance: Document, value: Any):
+    def __set__(self, instance: Document, value: Any) -> None:
         """
         Prevent direct assignment to RelatedSet.
 
@@ -508,7 +508,7 @@ class ManyToManyManager(Generic[T]):
         remote_field: str,
         local_junction_field: str,
         remote_junction_field: str,
-    ):
+    ) -> None:
         """
         Initialize ManyToManyManager.
 
@@ -814,7 +814,7 @@ class ManyToMany(Generic[T]):
         remote_field: str,
         local_junction_field: str | None = None,
         remote_junction_field: str | None = None,
-    ):
+    ) -> None:
         """
         Initialize ManyToMany descriptor.
 
@@ -885,7 +885,7 @@ class ManyToMany(Generic[T]):
 
         return manager
 
-    def __set__(self, instance: Document, value: Any):
+    def __set__(self, instance: Document, value: Any) -> None:
         """
         Prevent direct assignment to ManyToMany.
 

@@ -87,7 +87,7 @@ def db_path(tmp_path):
 
 
 @pytest.fixture
-def create_db(db_path, request):
+def create_db(db_path):
     """Per test function create database in pytest managed temporary folder
 
     Usage
@@ -103,16 +103,6 @@ def create_db(db_path, request):
     """
     db = KenobiX(db_path)
 
-    def cleanup():
-        """Pretty way but works.
-
-        Purposefully refrain from: purge database or delete database file.
-
-        Let pytest manage removing the db file. So can later
-        debug a test function in a working debug environment.
-        """
-        db.close()
-
     def _fcn():
         """Initializes database. After test function close database.
 
@@ -125,9 +115,7 @@ def create_db(db_path, request):
         - open a REPR with :command:`python`
 
         """
-
         return db
 
-    request.addfinalizer(cleanup)
-
-    return _fcn
+    yield _fcn
+    db.close()

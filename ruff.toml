@@ -6,7 +6,7 @@ lint.select = [
 
 lint.extend-ignore = [
     # Later...
-    "ANN", # flake8-annotations
+    "A",
     "D", # pydocstyle
     "DOC",
     "TRY",
@@ -14,7 +14,6 @@ lint.extend-ignore = [
     "ARG",
     "FBT",
     "ERA",
-    "A",
     # False positives
     "COM812", #  	[*] missing-trailing-comma
     "T201", #    	[*] print
@@ -26,11 +25,11 @@ lint.extend-ignore = [
     # FIX or review This
     "S608", # Potential SQL injection
     # Review later
-    "SLF001", #	[ ] private-member-access
-    "CPY001", #	[ ] missing-copyright-notice
-    "PT011", # 	[ ] pytest-raises-too-broad
-    "PT021", #  	pytest-fixture-finalizer-callback
-    "SIM102", # 	collapsible-if
+    "SLF001", #	private-member-access
+    "CPY001", #	missing-copyright-notice
+    "ANN003",
+    "ANN401",
+    "ANN",
 ]
 
 [lint.extend-per-file-ignores]
@@ -41,7 +40,9 @@ lint.extend-ignore = [
     "RUF012",  # Meta class indexed_fields is intentionally mutable class attribute
 ]
 "tests/**/*.py" = [
+    "ANN", # flake8-annotations
     "RUF012",  # Meta class indexed_fields is intentionally mutable class attribute
     "N806",    # Variable in function should be lowercase (e.g., Product = setup_models)
     "PLC2701", # Private name import (e.g., _parse_filter_key for testing)
+    "PT011", # `pytest.raises(ValueError)` is too broad
 ]

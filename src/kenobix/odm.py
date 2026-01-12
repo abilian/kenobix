@@ -292,7 +292,7 @@ class Document:
             self._id = None
 
     @classmethod
-    def set_database(cls, db: KenobiX):
+    def set_database(cls, db: KenobiX) -> None:
         """
         Set the database instance for all Document models.
 
@@ -348,19 +348,19 @@ class Document:
         return db.transaction()
 
     @classmethod
-    def begin(cls):
+    def begin(cls) -> None:
         """Begin a transaction. Delegate to database."""
         db = cls._get_db()
         db.begin()
 
     @classmethod
-    def commit(cls):
+    def commit(cls) -> None:
         """Commit current transaction. Delegate to database."""
         db = cls._get_db()
         db.commit()
 
     @classmethod
-    def rollback(cls):
+    def rollback(cls) -> None:
         """Rollback current transaction. Delegate to database."""
         db = cls._get_db()
         db.rollback()

@@ -27,7 +27,7 @@ class Collection:
         db: KenobiX,
         name: str,
         indexed_fields: list[str] | None = None,
-    ):
+    ) -> None:
         """
         Initialize a collection.
 
@@ -47,7 +47,7 @@ class Collection:
         # Initialize table
         self._initialize_table()
 
-    def _initialize_table(self):
+    def _initialize_table(self) -> None:
         """Create table with generated columns for indexed fields."""
         with self._write_lock:
             # Build CREATE TABLE with generated columns
@@ -88,7 +88,7 @@ class Collection:
         """Convert field name to valid SQL identifier."""
         return "".join(c if c.isalnum() else "_" for c in field)
 
-    def _maybe_commit(self):
+    def _maybe_commit(self) -> None:
         """Commit if not in a transaction (delegates to parent database)."""
         if not self.db._in_transaction:
             self._connection.commit()
