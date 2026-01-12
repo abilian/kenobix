@@ -1,5 +1,11 @@
 preview = true
 
+include = [
+    "src",
+    "tests",
+    "pyproject.toml",
+]
+
 lint.select = [
     "ALL",
 ]
