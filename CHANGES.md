@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
-## [Unreleased]
+## [0.10.0] - 2026-01-12
 
 ### Added
 - **PostgreSQL Backend Support** - KenobiX now supports PostgreSQL in addition to SQLite:
@@ -23,6 +23,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `SQLiteBackend` - Default backend (no external dependencies)
   - `PostgreSQLBackend` - Optional PostgreSQL support (requires psycopg2)
 
+- **Database Migration Utilities** - New `migrate` module and CLI commands:
+  - `migrate(source, dest)` - Migrate all collections between databases
+  - `migrate_collection(source, dest, name)` - Migrate a single collection
+  - `export_to_json()` / `import_from_json()` - JSON export/import functions
+  - CLI commands:
+    - `kenobix migrate source.db dest.db` - Migrate between databases
+    - `kenobix import backup.json newdb.db` - Import from JSON file
+  - Supports SQLite-to-SQLite, SQLite-to-PostgreSQL, and PostgreSQL-to-SQLite
+  - Progress callbacks for monitoring long migrations
+  - Batch processing with configurable batch size
+
 ### Changed
 - Refactored core database layer to use backend abstraction
 - `KenobiX` constructor now accepts `connection` parameter (string or Path)
@@ -30,9 +41,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `stats()` now includes `backend` field indicating backend type
 
 ### Testing
-- 25 new tests for backend abstraction layer
-- PostgreSQL dialect and backend tests (skipped if psycopg2 not installed)
-- Total test count: 397 tests
+- 35 new tests for backend abstraction layer (25 SQLite, 10 PostgreSQL)
+- 19 new tests for migration utilities
+- 10 new tests for migrate/import CLI commands
+- PostgreSQL tests skipped if psycopg2 not installed
+- Total test count: 426 tests
+- Coverage: 91%+
 
 
 ## [0.9.0] - 2026-01-06

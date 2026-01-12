@@ -2,14 +2,18 @@
 KenobiX Command Line Interface
 
 Commands:
-    dump    Dump database contents in human-readable JSON format
-    info    Show database information
+    dump      Dump database contents in human-readable JSON format
+    info      Show database information
+    migrate   Migrate data between databases (SQLite/PostgreSQL)
+    import    Import database from JSON file
 
 Examples:
     kenobix dump -d mydb.db
     kenobix -d mydb.db dump
     kenobix dump -d mydb.db -t users -o users.json
     KENOBIX_DATABASE=mydb.db kenobix info -v
+    kenobix migrate source.db postgresql://localhost/dest
+    kenobix import backup.json newdb.db
 """
 
 from __future__ import annotations
@@ -607,6 +611,101 @@ def cmd_info(args: argparse.Namespace) -> None:
     )
 
 
+def cmd_migrate(args: argparse.Namespace) -> None:
+    """Handle the migrate command."""
+    from .migrate import migrate, migrate_collection  # noqa: PLC0415
+
+    source = args.source
+    dest = args.dest
+    table = getattr(args, "table", None)
+    quiet = getattr(args, "quiet", False)
+    batch_size = getattr(args, "batch_size", 1000)
+
+    # Progress callback
+    def on_progress(message: str) -> None:
+        if not quiet:
+            print(message)
+
+    try:
+        if table:
+            # Migrate single collection
+            stats = migrate_collection(
+                source,
+                dest,
+                table,
+                on_progress=on_progress,
+                batch_size=batch_size,
+            )
+            if not quiet:
+                print("\nMigration complete:")
+                print(f"  Collection: {stats['collection']}")
+                print(f"  Documents:  {stats['documents']}")
+                print(f"  From:       {stats['source_type']}")
+                print(f"  To:         {stats['dest_type']}")
+        else:
+            # Migrate all collections
+            stats = migrate(
+                source,
+                dest,
+                on_progress=on_progress,
+                batch_size=batch_size,
+            )
+            if not quiet:
+                print("\nMigration complete:")
+                print(f"  Collections: {stats['collections']}")
+                print(f"  Documents:   {stats['documents']}")
+                print(f"  From:        {stats['source_type']}")
+                print(f"  To:          {stats['dest_type']}")
+
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    except ImportError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        print("\nFor PostgreSQL support, install: uv add kenobix[postgres]", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:  # noqa: BLE001
+        print(f"Migration failed: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_import(args: argparse.Namespace) -> None:
+    """Handle the import command."""
+    from .migrate import import_from_json  # noqa: PLC0415
+
+    json_path = args.input
+    dest = args.dest
+    quiet = getattr(args, "quiet", False)
+
+    # Check input file exists
+    if not Path(json_path).exists():
+        print(f"Error: Input file not found: {json_path}", file=sys.stderr)
+        sys.exit(1)
+
+    # Progress callback
+    def on_progress(message: str) -> None:
+        if not quiet:
+            print(message)
+
+    try:
+        stats = import_from_json(
+            json_path,
+            dest,
+            on_progress=on_progress,
+        )
+        if not quiet:
+            print("\nImport complete:")
+            print(f"  Collections: {stats['collections']}")
+            print(f"  Documents:   {stats['documents']}")
+
+    except json.JSONDecodeError as e:
+        print(f"Error: Invalid JSON file: {e}", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:  # noqa: BLE001
+        print(f"Import failed: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
 def create_parser() -> argparse.ArgumentParser:
     """Create and configure the argument parser."""
     # Parent parser for shared options (inherited by subcommands)
@@ -710,6 +809,95 @@ Database Resolution:
         help="Show info for only the specified table",
     )
     info_parser.set_defaults(func=cmd_info)
+
+    # Migrate command (doesn't use parent_parser for database)
+    migrate_parser = subparsers.add_parser(
+        "migrate",
+        help="Migrate data between databases",
+        description="""Migrate data between SQLite and PostgreSQL databases.
+
+Examples:
+    # SQLite to PostgreSQL
+    kenobix migrate mydb.db postgresql://user:pass@localhost/newdb
+
+    # PostgreSQL to SQLite
+    kenobix migrate postgresql://user:pass@localhost/db backup.db
+
+    # Migrate single collection
+    kenobix migrate mydb.db newdb.db -t users
+""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    migrate_parser.add_argument(
+        "source",
+        help="Source database (file path or postgresql:// URL)",
+    )
+    migrate_parser.add_argument(
+        "dest",
+        help="Destination database (file path or postgresql:// URL)",
+    )
+    migrate_parser.add_argument(
+        "-t",
+        "--table",
+        metavar="TABLE",
+        help="Migrate only the specified table/collection",
+    )
+    migrate_parser.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        help="Suppress progress output",
+    )
+    migrate_parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=1000,
+        metavar="N",
+        help="Documents per batch (default: 1000)",
+    )
+    migrate_parser.set_defaults(func=cmd_migrate)
+
+    # Import command
+    import_parser = subparsers.add_parser(
+        "import",
+        help="Import database from JSON file",
+        description="""Import data from a JSON file into a KenobiX database.
+
+The JSON file should have the format:
+{
+    "collection_name": [
+        {"field": "value", ...},
+        ...
+    ],
+    ...
+}
+
+Examples:
+    # Import to SQLite database
+    kenobix import backup.json mydb.db
+
+    # Import to PostgreSQL
+    kenobix import backup.json postgresql://user:pass@localhost/db
+""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    import_parser.add_argument(
+        "input",
+        metavar="JSON_FILE",
+        help="Input JSON file path",
+    )
+    import_parser.add_argument(
+        "dest",
+        metavar="DATABASE",
+        help="Destination database (file path or postgresql:// URL)",
+    )
+    import_parser.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        help="Suppress progress output",
+    )
+    import_parser.set_defaults(func=cmd_import)
 
     return parser
 

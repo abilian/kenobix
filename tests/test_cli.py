@@ -13,6 +13,7 @@ Tests cover:
 from __future__ import annotations
 
 import json
+import pathlib
 import sqlite3
 
 import pytest
@@ -821,3 +822,179 @@ class TestPseudoSchema:
 
         assert "Records: 0" in captured.out
         assert "no data to analyze" in captured.out
+
+
+# ============================================================================
+# Import Command Tests
+# ============================================================================
+
+
+class TestImportCommand:
+    """Tests for the import CLI command."""
+
+    def test_import_basic(self, tmp_path, capsys):
+        """Import command should import JSON to database."""
+        json_path = tmp_path / "import.json"
+        db_path = tmp_path / "imported.db"
+
+        # Create JSON file
+        data = {
+            "users": [{"name": "Alice"}, {"name": "Bob"}],
+            "products": [{"sku": "SKU001"}],
+        }
+        with pathlib.Path(json_path).open("w", encoding="utf-8") as f:
+            json.dump(data, f)
+
+        main(["import", str(json_path), str(db_path)])
+        captured = capsys.readouterr()
+
+        assert "Import complete" in captured.out
+        assert "Collections: 2" in captured.out
+        assert "Documents:   3" in captured.out
+
+        # Verify database content
+        db = KenobiX(str(db_path))
+        assert db.collection("users").stats()["document_count"] == 2
+        assert db.collection("products").stats()["document_count"] == 1
+        db.close()
+
+    def test_import_quiet_mode(self, tmp_path, capsys):
+        """Import command should be quiet with -q option."""
+        json_path = tmp_path / "import.json"
+        db_path = tmp_path / "imported.db"
+
+        # Create JSON file
+        data = {"users": [{"name": "Alice"}]}
+        with pathlib.Path(json_path).open("w", encoding="utf-8") as f:
+            json.dump(data, f)
+
+        main(["import", str(json_path), str(db_path), "-q"])
+        captured = capsys.readouterr()
+
+        # Should have no output in quiet mode
+        assert captured.out == ""  # noqa: PLC1901
+        assert db_path.exists()
+
+    def test_import_missing_file(self, tmp_path, capsys):
+        """Import command should error on missing input file."""
+        db_path = tmp_path / "dest.db"
+
+        with pytest.raises(SystemExit):
+            main(["import", "nonexistent.json", str(db_path)])
+
+        captured = capsys.readouterr()
+        assert "Input file not found" in captured.err
+
+    def test_import_invalid_json(self, tmp_path, capsys):
+        """Import command should error on invalid JSON."""
+        json_path = tmp_path / "invalid.json"
+        db_path = tmp_path / "dest.db"
+
+        # Create invalid JSON file
+        pathlib.Path(json_path).write_text("not valid json {{{", encoding="utf-8")
+
+        with pytest.raises(SystemExit):
+            main(["import", str(json_path), str(db_path)])
+
+        captured = capsys.readouterr()
+        assert "Invalid JSON" in captured.err
+
+
+# ============================================================================
+# Migrate Command Tests
+# ============================================================================
+
+
+class TestMigrateCommand:
+    """Tests for the migrate CLI command."""
+
+    def test_migrate_basic(self, db_with_collections, tmp_path, capsys):
+        """Migrate command should migrate all collections."""
+        dest_path = tmp_path / "migrated.db"
+
+        main(["migrate", str(db_with_collections), str(dest_path)])
+        captured = capsys.readouterr()
+
+        assert "Migration complete" in captured.out
+        assert dest_path.exists()
+
+        # Verify data
+        db = KenobiX(str(dest_path))
+        assert db.collection("users").stats()["document_count"] == 2
+        assert db.collection("orders").stats()["document_count"] == 1
+        db.close()
+
+    def test_migrate_single_table(self, db_with_collections, tmp_path, capsys):
+        """Migrate command should migrate single table with -t option."""
+        dest_path = tmp_path / "migrated.db"
+
+        main(["migrate", str(db_with_collections), str(dest_path), "-t", "users"])
+        captured = capsys.readouterr()
+
+        assert "Migration complete" in captured.out
+        assert "Collection: users" in captured.out
+
+        # Verify only users migrated
+        db = KenobiX(str(dest_path))
+        assert db.collection("users").stats()["document_count"] == 2
+        db.close()
+
+    def test_migrate_quiet_mode(self, db_with_collections, tmp_path, capsys):
+        """Migrate command should be quiet with -q option."""
+        dest_path = tmp_path / "migrated.db"
+
+        main(["migrate", str(db_with_collections), str(dest_path), "-q"])
+        captured = capsys.readouterr()
+
+        # Should have no output in quiet mode
+        assert captured.out == ""  # noqa: PLC1901
+        assert dest_path.exists()
+
+    def test_migrate_same_source_dest_error(self, db_with_data, capsys):
+        """Migrate command should error when source equals destination."""
+        with pytest.raises(SystemExit):
+            main(["migrate", str(db_with_data), str(db_with_data)])
+
+        captured = capsys.readouterr()
+        assert "Source and destination cannot be the same" in captured.err
+
+    def test_migrate_with_batch_size(self, db_with_collections, tmp_path, capsys):
+        """Migrate command should accept --batch-size option."""
+        dest_path = tmp_path / "migrated.db"
+
+        main(
+            [
+                "migrate",
+                str(db_with_collections),
+                str(dest_path),
+                "--batch-size",
+                "10",
+                "-q",
+            ]
+        )
+
+        # Verify migration worked
+        db = KenobiX(str(dest_path))
+        assert db.collection("users").stats()["document_count"] == 2
+        db.close()
+
+    def test_migrate_roundtrip(self, db_with_collections, tmp_path, capsys):
+        """Migrate to new db and back should preserve data."""
+        intermediate = tmp_path / "intermediate.db"
+        final = tmp_path / "final.db"
+
+        # Migrate to intermediate
+        main(["migrate", str(db_with_collections), str(intermediate), "-q"])
+
+        # Migrate back to final
+        main(["migrate", str(intermediate), str(final), "-q"])
+
+        # Verify data preserved
+        db = KenobiX(str(final))
+        users = db.collection("users")
+        assert users.stats()["document_count"] == 2
+
+        alice = users.search("name", "Alice")
+        assert len(alice) == 1
+        assert alice[0]["email"] == "alice@example.com"
+        db.close()
