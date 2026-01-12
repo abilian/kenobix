@@ -15,8 +15,8 @@ if TYPE_CHECKING:
 
 # Import psycopg2 - will raise ImportError if not installed
 try:
-    import psycopg2  # type: ignore[import-untyped]
-    import psycopg2.pool  # type: ignore[import-untyped]
+    import psycopg2
+    import psycopg2.pool
 except ImportError as e:
     msg = (
         "PostgreSQL support requires psycopg2. "
