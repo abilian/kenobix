@@ -6,6 +6,7 @@ Commands:
     info      Show database information
     migrate   Migrate data between databases (SQLite/PostgreSQL)
     import    Import database from JSON file
+    serve     Start Web UI server (requires kenobix[webui])
 
 Examples:
     kenobix dump -d mydb.db
@@ -14,6 +15,7 @@ Examples:
     KENOBIX_DATABASE=mydb.db kenobix info -v
     kenobix migrate source.db postgresql://localhost/dest
     kenobix import backup.json newdb.db
+    kenobix serve -d mydb.db
 """
 
 from __future__ import annotations
@@ -669,6 +671,27 @@ def cmd_migrate(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def cmd_serve(args: argparse.Namespace) -> None:
+    """Handle the serve command."""
+    try:
+        from .webui import run_server  # noqa: PLC0415
+    except ImportError:
+        print("Error: Web UI not installed.", file=sys.stderr)
+        print("Install with: pip install kenobix[webui]", file=sys.stderr)
+        sys.exit(1)
+
+    db_path = resolve_database(args)
+    check_database_exists(db_path)
+
+    run_server(
+        db_path=db_path,
+        host=getattr(args, "host", "127.0.0.1"),
+        port=getattr(args, "port", 8000),
+        open_browser=not getattr(args, "no_browser", False),
+        quiet=getattr(args, "quiet", False),
+    )
+
+
 def cmd_import(args: argparse.Namespace) -> None:
     """Handle the import command."""
     from .migrate import import_from_json  # noqa: PLC0415
@@ -745,6 +768,7 @@ Examples:
   kenobix -d mydb.db dump -t users     Dump only users table
   kenobix info -d mydb.db -v           Show detailed database info
   kenobix dump -o backup.json          Dump to file (auto-detect database)
+  kenobix serve -d mydb.db             Start web UI (requires kenobix[webui])
 
 Environment:
   KENOBIX_DATABASE    Default database path
@@ -898,6 +922,48 @@ Examples:
         help="Suppress progress output",
     )
     import_parser.set_defaults(func=cmd_import)
+
+    # Serve command (Web UI)
+    serve_parser = subparsers.add_parser(
+        "serve",
+        help="Start the Web UI server",
+        description="""Start a read-only web interface for exploring the database.
+
+Requires optional dependencies: pip install kenobix[webui]
+
+Examples:
+    # Start server with auto-detected database
+    kenobix serve
+
+    # Specify database file
+    kenobix serve -d mydb.db
+
+    # Custom host and port
+    kenobix serve -d mydb.db --host 0.0.0.0 --port 8080
+
+    # Don't open browser automatically
+    kenobix serve -d mydb.db --no-browser
+""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        parents=[parent_parser],
+    )
+    serve_parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Host address to bind to (default: 127.0.0.1)",
+    )
+    serve_parser.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help="Port number (default: 8000)",
+    )
+    serve_parser.add_argument(
+        "--no-browser",
+        action="store_true",
+        help="Don't open browser automatically",
+    )
+    serve_parser.set_defaults(func=cmd_serve)
 
     return parser
 

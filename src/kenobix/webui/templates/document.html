@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Document #{{ doc._id }} - {{ collection }} - KenobiX{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+  <ul>
+    <li><a href="/">Home</a></li>
+    <li><a href="/collection/{{ collection }}">{{ collection }}</a></li>
+    <li>Document #{{ doc._id }}</li>
+  </ul>
+</nav>
+{% endblock %}
+
+{% block content %}
+<hgroup>
+  <h1>Document #{{ doc._id }}</h1>
+  <p>Collection: <a href="/collection/{{ collection }}">{{ collection }}</a></p>
+</hgroup>
+
+<article>
+  <pre><code id="doc-json">{{ doc_json }}</code></pre>
+</article>
+
+<nav class="pagination-nav">
+  <ul>
+    <li><a href="/collection/{{ collection }}" role="button" class="outline">&larr; Back to {{ collection }}</a></li>
+  </ul>
+  <ul>
+    <li><button onclick="copyJson()" class="outline">Copy JSON</button></li>
+    <li><a href="/api/collection/{{ collection }}/doc/{{ doc._id }}" role="button" class="outline secondary" target="_blank">Raw JSON</a></li>
+  </ul>
+</nav>
+
+<script>
+function copyJson() {
+  const json = document.getElementById('doc-json').textContent;
+  navigator.clipboard.writeText(json).then(() => {
+    // Show feedback
+    const btn = event.target;
+    const originalText = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = originalText; }, 1500);
+  });
+}
+</script>
+{% endblock %}

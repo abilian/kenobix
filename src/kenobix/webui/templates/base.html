@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}KenobiX Explorer{% endblock %}</title>
+
+  <!-- PicoCSS - classless CSS framework -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+
+  <!-- htmx - interactivity (loaded for future phases) -->
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+
+  <style>
+    /* Document preview truncation */
+    .doc-preview {
+      max-width: 500px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-family: var(--pico-font-family-monospace);
+      font-size: 0.875rem;
+    }
+
+    /* Stats grid */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+
+    .stats-grid article {
+      text-align: center;
+      margin: 0;
+    }
+
+    .stats-grid article header {
+      padding: 0.5rem;
+      font-size: 0.875rem;
+      color: var(--pico-muted-color);
+    }
+
+    .stats-grid article strong {
+      font-size: 1.5rem;
+    }
+
+    /* Table improvements */
+    .doc-id {
+      font-family: var(--pico-font-family-monospace);
+      white-space: nowrap;
+    }
+
+    /* Pagination styling */
+    .pagination-nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 1rem;
+    }
+
+    .pagination-nav ul {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    /* Code block in document view */
+    pre {
+      max-height: 70vh;
+      overflow: auto;
+    }
+
+    /* Theme toggle */
+    .theme-toggle {
+      cursor: pointer;
+      background: none;
+      border: none;
+      font-size: 1.25rem;
+      padding: 0;
+    }
+
+    /* Badge for indexed fields */
+    .badge {
+      display: inline-block;
+      padding: 0.125rem 0.375rem;
+      font-size: 0.75rem;
+      background: var(--pico-secondary-background);
+      border-radius: var(--pico-border-radius);
+      margin-right: 0.25rem;
+    }
+
+    /* Document table styling */
+    .doc-table {
+      font-size: 0.9rem;
+    }
+
+    .doc-table th {
+      white-space: nowrap;
+    }
+
+    .col-id {
+      width: 60px;
+      font-family: var(--pico-font-family-monospace);
+      text-align: right;
+    }
+
+    .col-actions {
+      width: 60px;
+      text-align: center;
+    }
+
+    /* Indexed field marker */
+    .indexed-marker {
+      color: var(--pico-primary);
+      font-weight: bold;
+      margin-left: 0.25rem;
+    }
+
+    /* Cell type styling */
+    .cell-null {
+      color: var(--pico-muted-color);
+      font-style: italic;
+    }
+
+    .cell-boolean {
+      font-family: var(--pico-font-family-monospace);
+      color: var(--pico-primary);
+    }
+
+    .cell-number {
+      font-family: var(--pico-font-family-monospace);
+      text-align: right;
+    }
+
+    .cell-string {
+      max-width: 300px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .cell-array,
+    .cell-object {
+      font-family: var(--pico-font-family-monospace);
+      font-size: 0.8rem;
+      color: var(--pico-muted-color);
+      cursor: help;
+    }
+
+    /* Tooltip for truncated/complex values */
+    .has-tooltip {
+      cursor: help;
+      border-bottom: 1px dotted var(--pico-muted-color);
+    }
+
+    .has-tooltip:hover {
+      color: var(--pico-primary);
+    }
+
+    /* Search page styles */
+    .search-form {
+      margin-bottom: 2rem;
+    }
+
+    .search-form fieldset {
+      margin-bottom: 0;
+    }
+
+    .search-summary {
+      margin-bottom: 1.5rem;
+      color: var(--pico-muted-color);
+    }
+
+    .search-results-section {
+      margin-bottom: 2rem;
+    }
+
+    .search-results-section header {
+      padding: 0.5rem 1rem;
+    }
+
+    .search-results-section h2 {
+      margin: 0;
+      font-size: 1.25rem;
+    }
+
+    .search-results-section h2 small {
+      font-weight: normal;
+      color: var(--pico-muted-color);
+    }
+
+    .search-snippet {
+      font-family: var(--pico-font-family-monospace);
+      font-size: 0.85rem;
+      word-break: break-all;
+      white-space: pre-wrap;
+    }
+
+    .search-results-table {
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <header class="container">
+    <nav>
+      <ul>
+        <li><strong><a href="/">KenobiX Explorer</a></strong></li>
+      </ul>
+      <ul>
+        <li><a href="/search" title="Search documents">Search</a></li>
+        <li><small>{{ db_name }}</small></li>
+        <li>
+          <button class="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode">
+            <span id="theme-icon">&#9790;</span>
+          </button>
+        </li>
+      </ul>
+    </nav>
+    {% block breadcrumb %}{% endblock %}
+  </header>
+
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="container">
+    <hr>
+    <small>KenobiX Explorer - Read-only database browser</small>
+  </footer>
+
+  <script>
+    // Theme toggle
+    function toggleTheme() {
+      const html = document.documentElement;
+      const currentTheme = html.getAttribute('data-theme');
+      const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+      html.setAttribute('data-theme', newTheme);
+      localStorage.setItem('theme', newTheme);
+      updateThemeIcon(newTheme);
+    }
+
+    function updateThemeIcon(theme) {
+      const icon = document.getElementById('theme-icon');
+      icon.textContent = theme === 'light' ? '\u263E' : '\u2600';
+    }
+
+    // Load saved theme
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    updateThemeIcon(savedTheme);
+  </script>
+</body>
+</html>

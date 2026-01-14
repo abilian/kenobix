@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}Search{% if query %}: {{ query }}{% endif %} - KenobiX Explorer{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+  <ul>
+    <li><a href="/">Home</a></li>
+    <li>Search</li>
+  </ul>
+</nav>
+{% endblock %}
+
+{% block content %}
+<h1>Search</h1>
+
+<form action="/search" method="get" class="search-form">
+  <fieldset role="group">
+    <input
+      type="search"
+      name="q"
+      placeholder="Search documents..."
+      value="{{ query }}"
+      autofocus
+      aria-label="Search query"
+    >
+    <select name="collection" aria-label="Collection filter">
+      <option value="">All collections</option>
+      {% for coll in collections %}
+      <option value="{{ coll }}"{% if coll == selected_collection %} selected{% endif %}>{{ coll }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit">Search</button>
+  </fieldset>
+</form>
+
+{% if query %}
+<p class="search-summary">
+  {% if total_results == 0 %}
+  No results found for "<strong>{{ query }}</strong>"
+  {% elif total_results == 1 %}
+  Found <strong>1</strong> result for "<strong>{{ query }}</strong>"
+  {% else %}
+  Found <strong>{{ total_results }}</strong> results for "<strong>{{ query }}</strong>"
+  {% endif %}
+  {% if selected_collection %}
+  in <strong>{{ selected_collection }}</strong>
+  {% endif %}
+</p>
+
+{% if results %}
+{% for coll_name, coll_results in results.items() %}
+<article class="search-results-section">
+  <header>
+    <h2>
+      <a href="/collection/{{ coll_name }}">{{ coll_name }}</a>
+      <small>({{ coll_results | length }} result{% if coll_results | length != 1 %}s{% endif %})</small>
+    </h2>
+  </header>
+
+  <table class="search-results-table">
+    <thead>
+      <tr>
+        <th scope="col" style="width: 60px;">ID</th>
+        <th scope="col">Match</th>
+        <th scope="col" style="width: 80px;"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for result in coll_results %}
+      <tr>
+        <td class="doc-id">{{ result.doc_id }}</td>
+        <td>
+          <code class="search-snippet">{{ result.snippet }}</code>
+        </td>
+        <td>
+          <a href="/collection/{{ coll_name }}/doc/{{ result.doc_id }}">View</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</article>
+{% endfor %}
+{% endif %}
+
+{% else %}
+<article>
+  <p>Enter a search query to find documents across all collections.</p>
+  <p>Tips:</p>
+  <ul>
+    <li>Search is case-insensitive</li>
+    <li>Matches any part of the document (field names and values)</li>
+    <li>Use the dropdown to search within a specific collection</li>
+  </ul>
+</article>
+{% endif %}
+
+<p style="margin-top: 2rem;">
+  <a href="/">&larr; Back to overview</a>
+</p>
+{% endblock %}

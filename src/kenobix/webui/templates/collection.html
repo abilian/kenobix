@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block title %}{{ collection }} - KenobiX Explorer{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb">
+  <ul>
+    <li><a href="/">Home</a></li>
+    <li>{{ collection }}</li>
+  </ul>
+</nav>
+{% endblock %}
+
+{% block content %}
+<hgroup>
+  <h1>{{ collection }}</h1>
+  <p>
+    {{ "{:,}".format(total) }} documents
+    {% if indexed %}
+    &middot; Indexed:
+    {% for field in indexed %}
+    <span class="badge">{{ field }}</span>
+    {% endfor %}
+    {% endif %}
+  </p>
+</hgroup>
+
+{% if documents %}
+<figure>
+  <table class="doc-table">
+    <thead>
+      <tr>
+        {% for col in columns %}
+        <th scope="col"{% if col.name == '_id' %} class="col-id"{% endif %}>
+          {{ col.display_name }}
+          {% if col.is_indexed %}<span class="indexed-marker" title="Indexed field">*</span>{% endif %}
+        </th>
+        {% endfor %}
+        <th scope="col" class="col-actions"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for doc in documents %}
+      <tr>
+        {% for col in columns %}
+        {% set cell = doc.get(col.name) | format_cell %}
+        <td class="cell-{{ cell.type.split()[0] }}"{% if col.name == '_id' %} class="col-id"{% endif %}>
+          {% if cell.full %}
+          <span class="has-tooltip" title="{{ cell.full | e }}">{{ cell.display }}</span>
+          {% else %}
+          {{ cell.display }}
+          {% endif %}
+        </td>
+        {% endfor %}
+        <td class="col-actions"><a href="/collection/{{ collection }}/doc/{{ doc._id }}">View</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</figure>
+
+<!-- Pagination -->
+<nav class="pagination-nav">
+  <ul>
+    {% if pagination.has_prev %}
+    <li><a href="?page={{ pagination.page - 1 }}" role="button" class="outline">&#8592; Previous</a></li>
+    {% else %}
+    <li><a role="button" class="outline secondary" disabled aria-disabled="true">&#8592; Previous</a></li>
+    {% endif %}
+  </ul>
+
+  <span>Page {{ pagination.page }} of {{ pagination.total_pages }}</span>
+
+  <ul>
+    {% if pagination.has_next %}
+    <li><a href="?page={{ pagination.page + 1 }}" role="button" class="outline">Next &#8594;</a></li>
+    {% else %}
+    <li><a role="button" class="outline secondary" disabled aria-disabled="true">Next &#8594;</a></li>
+    {% endif %}
+  </ul>
+</nav>
+
+{% else %}
+<article>
+  <p>No documents in this collection.</p>
+</article>
+{% endif %}
+
+<p style="margin-top: 2rem;">
+  <a href="/">&larr; Back to overview</a>
+</p>
+{% endblock %}
