@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import argparse
 
-from .dump import add_dump_command
+from .export import add_dump_command, add_export_command
 from .import_cmd import add_import_command
 from .info import add_info_command
 from .migrate import add_migrate_command
@@ -60,10 +60,11 @@ def create_parser() -> argparse.ArgumentParser:
         parents=[parent_parser],
         epilog="""
 Examples:
-  kenobix dump -d mydb.db              Dump entire database
-  kenobix -d mydb.db dump -t users     Dump only users table
+  kenobix export -d mydb.db            Export entire database as JSON
+  kenobix export -d mydb.db -t users   Export only users table
+  kenobix export -t users -f csv       Export users as CSV
+  kenobix export -f sql -o backup.sql  Export as SQL statements
   kenobix info -d mydb.db -v           Show detailed database info
-  kenobix dump -o backup.json          Dump to file (auto-detect database)
   kenobix serve -d mydb.db             Start web UI (requires kenobix[webui])
   kenobix -c config.toml serve         Use explicit config file
 
@@ -90,7 +91,8 @@ Database Resolution:
         metavar="<command>",
     )
 
-    add_dump_command(subparsers, parent_parser)
+    add_export_command(subparsers, parent_parser)
+    add_dump_command(subparsers, parent_parser)  # Deprecated alias
     add_info_command(subparsers, parent_parser)
     add_migrate_command(subparsers)
     add_import_command(subparsers)

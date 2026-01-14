@@ -2,16 +2,17 @@
 KenobiX Command Line Interface
 
 Commands:
-    dump      Dump database contents in human-readable JSON format
+    export    Export database contents (JSON, CSV, or SQL)
+    dump      [Deprecated] Use 'export' instead
     info      Show database information
     migrate   Migrate data between databases (SQLite/PostgreSQL)
     import    Import database from JSON file
     serve     Start Web UI server (requires kenobix[webui])
 
 Examples:
-    kenobix dump -d mydb.db
-    kenobix -d mydb.db dump
-    kenobix dump -d mydb.db -t users -o users.json
+    kenobix export -d mydb.db
+    kenobix export -d mydb.db -t users -f csv
+    kenobix export -d mydb.db -f sql -o backup.sql
     KENOBIX_DATABASE=mydb.db kenobix info -v
     kenobix migrate source.db postgresql://localhost/dest
     kenobix import backup.json newdb.db
@@ -21,7 +22,20 @@ Examples:
 from __future__ import annotations
 
 # Re-export all functions for backward compatibility
-from .dump import add_dump_command, cmd_dump, dump_database, dump_table
+from .export import (
+    add_dump_command,
+    add_export_command,
+    cmd_dump,
+    cmd_export,
+    dump_database,
+    dump_table,
+    export_csv,
+    export_database,
+    export_flat_sql,
+    export_json,
+    export_sql,
+    get_table_records,
+)
 from .import_cmd import add_import_command, cmd_import
 from .info import (
     add_info_command,
@@ -51,12 +65,14 @@ from .utils import (
 
 __all__ = [
     "add_dump_command",
+    "add_export_command",
     "add_import_command",
     "add_info_command",
     "add_migrate_command",
     "add_serve_command",
     "check_database_exists",
     "cmd_dump",
+    "cmd_export",
     "cmd_import",
     "cmd_info",
     "cmd_migrate",
@@ -64,10 +80,16 @@ __all__ = [
     "create_parser",
     "dump_database",
     "dump_table",
+    "export_csv",
+    "export_database",
+    "export_flat_sql",
+    "export_json",
+    "export_sql",
     "find_database",
     "get_all_tables",
     "get_indexed_fields",
     "get_table_info",
+    "get_table_records",
     "infer_json_type",
     "infer_pseudo_schema",
     "main",
