@@ -19,7 +19,7 @@ import sqlite3
 import pytest
 
 from kenobix import KenobiX
-from kenobix._cli import (
+from kenobix.cli import (
     check_database_exists,
     cmd_dump,
     cmd_info,
