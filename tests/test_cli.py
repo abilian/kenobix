@@ -19,7 +19,7 @@ import sqlite3
 import pytest
 
 from kenobix import KenobiX
-from kenobix.cli import (
+from kenobix._cli import (
     check_database_exists,
     cmd_dump,
     cmd_info,
@@ -962,16 +962,14 @@ class TestMigrateCommand:
         """Migrate command should accept --batch-size option."""
         dest_path = tmp_path / "migrated.db"
 
-        main(
-            [
-                "migrate",
-                str(db_with_collections),
-                str(dest_path),
-                "--batch-size",
-                "10",
-                "-q",
-            ]
-        )
+        main([
+            "migrate",
+            str(db_with_collections),
+            str(dest_path),
+            "--batch-size",
+            "10",
+            "-q",
+        ])
 
         # Verify migration worked
         db = KenobiX(str(dest_path))
