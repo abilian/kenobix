@@ -20,6 +20,7 @@ def run_server(
     *,
     open_browser: bool = True,
     quiet: bool = False,
+    ignore_config: bool = False,
 ) -> None:
     """
     Start the KenobiX Web UI server.
@@ -30,7 +31,10 @@ def run_server(
         port: Port number to listen on
         open_browser: Whether to open browser automatically
         quiet: Suppress startup messages
+        ignore_config: Skip loading kenobix.toml config file
     """
+    from .config import get_config_path  # noqa: PLC0415
+
     # Security warning for non-localhost binding
     if host == "0.0.0.0":  # noqa: S104
         print("WARNING: Server is accessible from the network.", file=sys.stderr)
@@ -41,7 +45,12 @@ def run_server(
         print(file=sys.stderr)
 
     # Initialize app with database path
-    init_app(db_path)
+    init_app(db_path, ignore_config=ignore_config)
+
+    # Show config status
+    config_path = get_config_path()
+    if not quiet and config_path:
+        print(f"Config:   {config_path}")
 
     # Build URL
     display_host = "localhost" if host in ("0.0.0.0", "127.0.0.1") else host  # noqa: S104

@@ -9,12 +9,21 @@ from __future__ import annotations
 import json
 import re
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from bottle import Bottle, request, response
 from jinja2 import Environment, PackageLoader, select_autoescape
+
+from .config import (
+    CollectionConfig,
+    WebUIConfig,
+    format_column_name,
+    load_config,
+    reset_config,
+)
+from .formatters import format_value
 
 if TYPE_CHECKING:
     from kenobix import KenobiX
@@ -37,6 +46,7 @@ class _AppState:
 
     db_path: str | None = None
     db_name: str | None = None
+    config: WebUIConfig = field(default_factory=WebUIConfig)
 
 
 # Module state (avoids global statement warnings)
@@ -52,15 +62,17 @@ env = Environment(
 )
 
 
-def init_app(db_path: str) -> None:
+def init_app(db_path: str, *, ignore_config: bool = False) -> None:
     """
     Initialize the app with database path.
 
     Args:
         db_path: Path to the KenobiX database file
+        ignore_config: If True, skip loading kenobix.toml config file
     """
     _state.db_path = db_path
     _state.db_name = Path(db_path).name
+    _state.config = load_config(db_path, ignore_config=ignore_config)
 
 
 @contextmanager
@@ -282,18 +294,47 @@ def _score_field(
 def infer_table_schema(
     documents: list[dict],
     indexed_fields: list[str],
-    max_columns: int = 6,
+    collection_name: str | None = None,
+    max_columns: int | None = None,
 ) -> list[TableColumn]:
     """
     Infer table columns from documents using heuristics.
 
-    Heuristics:
+    If a collection config exists with explicit columns, use those.
+    Otherwise, use heuristics:
     1. Always include _id as first column
     2. Prioritize indexed fields (they're likely important)
     3. Then add most common fields across documents
     4. Prefer simple types (string, number, bool) over complex (object, array)
     5. Limit total columns to max_columns
+
+    Args:
+        documents: List of document dicts to analyze
+        indexed_fields: List of indexed field names
+        collection_name: Optional collection name to look up config
+        max_columns: Max columns (defaults to config or 6)
     """
+    config = _state.config
+
+    # Get collection config if name provided
+    coll_config: CollectionConfig | None = None
+    if collection_name:
+        coll_config = config.get_collection(collection_name)
+
+    # Check if collection has explicit columns configured
+    if coll_config and coll_config.columns:
+        return [
+            TableColumn(
+                name=col_name,
+                display_name=coll_config.get_label(col_name),
+                is_indexed=col_name in indexed_fields,
+            )
+            for col_name in coll_config.columns
+        ]
+
+    # Use auto-inference
+    effective_max = max_columns or config.max_columns
+
     if not documents:
         return [TableColumn("_id", "ID")]
 
@@ -301,21 +342,21 @@ def infer_table_schema(
     columns = [TableColumn("_id", "ID")]
 
     # Add indexed fields first
-    for field in indexed_fields:
-        if field in field_stats and len(columns) < max_columns:
-            columns.append(
-                TableColumn(field, _format_column_name(field), is_indexed=True)
-            )
+    for fld in indexed_fields:
+        if fld in field_stats and len(columns) < effective_max:
+            label = coll_config.get_label(fld) if coll_config else format_column_name(fld)
+            columns.append(TableColumn(fld, label, is_indexed=True))
 
     # Score and sort remaining fields
     remaining = [f for f in field_stats if f not in indexed_fields]
     remaining.sort(key=lambda f: _score_field(f, field_stats[f], len(documents)))
 
     # Add top remaining fields
-    for field in remaining:
-        if len(columns) >= max_columns:
+    for fld in remaining:
+        if len(columns) >= effective_max:
             break
-        columns.append(TableColumn(field, _format_column_name(field)))
+        label = coll_config.get_label(fld) if coll_config else format_column_name(fld)
+        columns.append(TableColumn(fld, label))
 
     return columns
 
@@ -343,65 +384,35 @@ def _format_column_name(field: str) -> str:
     return name.title()
 
 
-def format_cell_value(value: Any, max_length: int = 50) -> dict[str, Any]:
+def format_cell_value(
+    value: Any,
+    max_length: int = 50,
+    formatter: str = "auto",
+    column_name: str | None = None,
+    collection_name: str | None = None,
+) -> dict[str, Any]:
     """
     Format a value for display in a table cell.
+
+    Args:
+        value: The value to format
+        max_length: Maximum display length for strings
+        formatter: Formatter name (e.g., "auto", "currency:USD", "badge")
+        column_name: Optional column name for config lookup
+        collection_name: Optional collection name for config lookup
 
     Returns:
         Dict with 'display' (string to show), 'type' (css class), 'full' (full value if truncated)
     """
-    if value is None:
-        return {"display": "—", "type": "null", "full": None}
+    config = _state.config
 
-    if isinstance(value, bool):
-        return {
-            "display": "true" if value else "false",
-            "type": "boolean",
-            "full": None,
-        }
+    # If column and collection provided, look up configured formatter
+    if column_name and collection_name and formatter == "auto":
+        coll_config = config.get_collection(collection_name)
+        formatter = coll_config.get_formatter(column_name)
 
-    if isinstance(value, int | float):
-        # Format numbers nicely
-        if isinstance(value, float):
-            display = f"{value:,.2f}" if value != int(value) else f"{int(value):,}"
-        else:
-            display = f"{value:,}"
-        return {"display": display, "type": "number", "full": None}
-
-    if isinstance(value, str):
-        if len(value) <= max_length:
-            return {"display": value, "type": "string", "full": None}
-        return {
-            "display": value[:max_length] + "…",
-            "type": "string truncated",
-            "full": value,
-        }
-
-    if isinstance(value, list):
-        count = len(value)
-        return {
-            "display": f"[{count} item{'s' if count != 1 else ''}]",
-            "type": "array",
-            "full": json.dumps(value, ensure_ascii=False),
-        }
-
-    if isinstance(value, dict):
-        count = len(value)
-        return {
-            "display": f"{{{count} field{'s' if count != 1 else ''}}}",
-            "type": "object",
-            "full": json.dumps(value, ensure_ascii=False),
-        }
-
-    # Fallback
-    display = str(value)
-    if len(display) > max_length:
-        return {
-            "display": display[:max_length] + "…",
-            "type": "unknown",
-            "full": display,
-        }
-    return {"display": display, "type": "unknown", "full": None}
+    # Use the formatters module
+    return format_value(value, formatter, config, max_length)
 
 
 # =============================================================================
@@ -533,12 +544,26 @@ def _create_snippet(data_json: str, query: str, context_chars: int = 50) -> str:
 @app.route("/")
 def index():
     """Database overview page."""
+    config = _state.config
+
     with get_db() as db:
-        # Get all collections
-        collection_names = db.collections()
+        # Get all collections, filtering out hidden ones
+        collection_names = [
+            name for name in db.collections()
+            if not config.is_collection_hidden(name)
+        ]
 
         # Get info for each collection
-        collections = [get_collection_info(db, name) for name in collection_names]
+        collections = []
+        for name in collection_names:
+            info = get_collection_info(db, name)
+            # Add display_name from config if available
+            coll_config = config.get_collection(name)
+            if coll_config.display_name:
+                info["display_name"] = coll_config.display_name
+            else:
+                info["display_name"] = name
+            collections.append(info)
 
         # Calculate totals
         total_docs = sum(c["count"] for c in collections)
@@ -553,12 +578,16 @@ def index():
             total_docs=total_docs,
             db_size=db_size,
             db_path=_state.db_path,
+            theme=config.theme,
         )
 
 
 @app.route("/collection/<name>")
 def collection_view(name: str):
     """Collection view with paginated documents."""
+    config = _state.config
+    coll_config = config.get_collection(name)
+
     # Get pagination params
     try:
         page = int(_get_query_param("page", "1"))
@@ -567,7 +596,7 @@ def collection_view(name: str):
     except ValueError:
         page = 1
 
-    per_page = 20
+    per_page = config.per_page
 
     with get_db() as db:
         # Check collection exists
@@ -586,17 +615,22 @@ def collection_view(name: str):
         # Get documents for this page
         documents = get_documents_paginated(db, name, per_page, pagination.offset)
 
-        # Infer table schema from documents
-        columns = infer_table_schema(documents, indexed)
+        # Infer table schema from documents (uses config if columns specified)
+        columns = infer_table_schema(documents, indexed, collection_name=name)
+
+        # Get display name
+        display_name = coll_config.display_name or name
 
         return render(
             "collection.html",
             collection=name,
+            display_name=display_name,
             documents=documents,
             columns=columns,
             pagination=pagination,
             total=total,
             indexed=indexed,
+            collection_config=coll_config,
         )
 
 
@@ -793,5 +827,44 @@ def api_search():
 # Module Initialization
 # =============================================================================
 
+
+def _jinja_format_cell(value: Any, column_name: str = "", collection_name: str = "") -> dict[str, Any]:
+    """Jinja2 filter wrapper for format_cell_value."""
+    return format_cell_value(
+        value,
+        column_name=column_name or None,
+        collection_name=collection_name or None,
+    )
+
+
 # Register Jinja2 filters (must be after function definitions)
-env.filters["format_cell"] = format_cell_value
+env.filters["format_cell"] = _jinja_format_cell
+
+
+# Re-export for testing
+__all__ = [
+    "Pagination",
+    "SearchResult",
+    "TableColumn",
+    "_create_snippet",
+    "app",
+    "format_cell_value",
+    "get_collection_info",
+    "get_db",
+    "get_documents_paginated",
+    "get_indexed_fields",
+    "infer_table_schema",
+    "init_app",
+    "render",
+    "reset_app",
+    "reset_config",
+    "search_all_collections",
+    "search_collection",
+]
+
+
+def reset_app() -> None:
+    """Reset app state (useful for testing)."""
+    global _state  # noqa: PLW0603
+    _state = _AppState()
+    reset_config()

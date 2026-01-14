@@ -675,6 +675,12 @@ def cmd_serve(args: argparse.Namespace) -> None:
     """Handle the serve command."""
     try:
         from .webui import run_server  # noqa: PLC0415
+        from .webui.config import (  # noqa: PLC0415
+            ConfigError,
+            get_config_path,
+            load_config,
+            validate_config_against_db,
+        )
     except ImportError:
         print("Error: Web UI not installed.", file=sys.stderr)
         print("Install with: pip install kenobix[webui]", file=sys.stderr)
@@ -683,13 +689,53 @@ def cmd_serve(args: argparse.Namespace) -> None:
     db_path = resolve_database(args)
     check_database_exists(db_path)
 
-    run_server(
-        db_path=db_path,
-        host=getattr(args, "host", "127.0.0.1"),
-        port=getattr(args, "port", 8000),
-        open_browser=not getattr(args, "no_browser", False),
-        quiet=getattr(args, "quiet", False),
-    )
+    ignore_config = getattr(args, "no_config", False)
+    validate_only = getattr(args, "validate_config", False)
+
+    # Load and validate config if requested
+    if validate_only:
+        from kenobix import KenobiX  # noqa: PLC0415
+
+        try:
+            load_config(db_path, ignore_config=ignore_config)
+            config_path = get_config_path()
+
+            if config_path:
+                print(f"Config file: {config_path}")
+            else:
+                print("Config file: (none, using defaults)")
+
+            # Validate against database
+            db = KenobiX(db_path)
+            try:
+                warnings = validate_config_against_db(db)
+                if warnings:
+                    print("\nValidation warnings:")
+                    for warning in warnings:
+                        print(f"  - {warning}")
+                else:
+                    print("\nValidation: OK")
+            finally:
+                db.close()
+
+        except ConfigError as e:
+            print(f"Config error: {e}", file=sys.stderr)
+            sys.exit(1)
+        return
+
+    # Normal serve mode
+    try:
+        run_server(
+            db_path=db_path,
+            host=getattr(args, "host", "127.0.0.1"),
+            port=getattr(args, "port", 8000),
+            open_browser=not getattr(args, "no_browser", False),
+            quiet=getattr(args, "quiet", False),
+            ignore_config=ignore_config,
+        )
+    except ConfigError as e:
+        print(f"Config error: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 def cmd_import(args: argparse.Namespace) -> None:
@@ -931,6 +977,11 @@ Examples:
 
 Requires optional dependencies: pip install kenobix[webui]
 
+Configuration:
+    The Web UI can be customized using a kenobix.toml file placed in:
+    1. Same directory as the database file
+    2. Current working directory
+
 Examples:
     # Start server with auto-detected database
     kenobix serve
@@ -943,6 +994,12 @@ Examples:
 
     # Don't open browser automatically
     kenobix serve -d mydb.db --no-browser
+
+    # Validate config file without starting server
+    kenobix serve -d mydb.db --validate-config
+
+    # Ignore config file (use defaults)
+    kenobix serve -d mydb.db --no-config
 """,
         formatter_class=argparse.RawDescriptionHelpFormatter,
         parents=[parent_parser],
@@ -962,6 +1019,16 @@ Examples:
         "--no-browser",
         action="store_true",
         help="Don't open browser automatically",
+    )
+    serve_parser.add_argument(
+        "--no-config",
+        action="store_true",
+        help="Ignore kenobix.toml configuration file",
+    )
+    serve_parser.add_argument(
+        "--validate-config",
+        action="store_true",
+        help="Validate config file and exit (don't start server)",
     )
     serve_parser.set_defaults(func=cmd_serve)
 
