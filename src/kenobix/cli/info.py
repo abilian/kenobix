@@ -6,13 +6,17 @@ and inferring pseudo-schemas from JSON data.
 
 from __future__ import annotations
 
+import argparse
 import json
 import sqlite3
 import sys
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from .utils import check_database_exists, get_all_tables
+from .utils import check_database_exists, get_all_tables, resolve_database
+
+if TYPE_CHECKING:
+    pass
 
 
 def get_table_info(db_path: str, table_name: str) -> dict[str, Any]:
@@ -381,3 +385,32 @@ def show_database_info(
         show_basic_table_list(db_path, all_tables)
     else:
         show_detailed_table_info(db_path, all_tables, verbosity)
+
+
+def cmd_info(args: argparse.Namespace) -> None:
+    """Handle the info command."""
+    db_path = resolve_database(args)
+    show_database_info(
+        db_path,
+        getattr(args, "verbose", 0),
+        getattr(args, "table", None),
+    )
+
+
+def add_info_command(
+    subparsers: Any, parent_parser: argparse.ArgumentParser
+) -> None:
+    """Add the info subcommand."""
+    parser = subparsers.add_parser(
+        "info",
+        help="Show database information",
+        description="Display information about a KenobiX database including tables, columns, and indexes.",
+        parents=[parent_parser],
+    )
+    parser.add_argument(
+        "-t",
+        "--table",
+        metavar="TABLE",
+        help="Show info for only the specified table",
+    )
+    parser.set_defaults(func=cmd_info)

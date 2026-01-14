@@ -59,17 +59,25 @@ def get_config() -> WebUIConfig:
     return _state.config
 
 
-def init_app(db_path: str, *, ignore_config: bool = False) -> None:
+def init_app(
+    db_path: str,
+    *,
+    ignore_config: bool = False,
+    config_path: str | None = None,
+) -> None:
     """
     Initialize the app with database path.
 
     Args:
         db_path: Path to the KenobiX database file
         ignore_config: If True, skip loading kenobix.toml config file
+        config_path: Explicit path to config file (overrides auto-discovery)
     """
     _state.db_path = db_path
     _state.db_name = Path(db_path).name
-    _state.config = load_config(db_path, ignore_config=ignore_config)
+    _state.config = load_config(
+        db_path, ignore_config=ignore_config, config_path=config_path
+    )
 
 
 @contextmanager

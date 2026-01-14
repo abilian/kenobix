@@ -4,12 +4,18 @@ The KenobiX Web UI can be customized using a `kenobix.toml` configuration file. 
 
 ## Config File Location
 
-The Web UI looks for `kenobix.toml` in this order:
+By default, the Web UI looks for `kenobix.toml` in this order:
 
 1. **Same directory as the database file**
 2. **Current working directory**
 
 The first file found is used. If no file exists, defaults are applied.
+
+You can also specify a config file explicitly using the `-c/--config` global CLI option:
+
+```bash
+kenobix -c /path/to/my-config.toml serve -d mydb.db
+```
 
 ## Basic Example
 

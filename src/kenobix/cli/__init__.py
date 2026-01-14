@@ -21,9 +21,11 @@ Examples:
 from __future__ import annotations
 
 # Re-export all functions for backward compatibility
-from .commands import cmd_dump, cmd_import, cmd_info, cmd_migrate, cmd_serve
-from .dump import dump_database, dump_table
+from .dump import add_dump_command, cmd_dump, dump_database, dump_table
+from .import_cmd import add_import_command, cmd_import
 from .info import (
+    add_info_command,
+    cmd_info,
     get_indexed_fields,
     get_table_info,
     infer_json_type,
@@ -37,7 +39,9 @@ from .info import (
     show_detailed_table_info,
     show_single_table_info,
 )
+from .migrate import add_migrate_command, cmd_migrate
 from .parser import create_parser
+from .serve import add_serve_command, cmd_serve
 from .utils import (
     check_database_exists,
     find_database,
@@ -46,6 +50,11 @@ from .utils import (
 )
 
 __all__ = [
+    "add_dump_command",
+    "add_import_command",
+    "add_info_command",
+    "add_migrate_command",
+    "add_serve_command",
     "check_database_exists",
     "cmd_dump",
     "cmd_import",

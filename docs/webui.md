@@ -33,16 +33,19 @@ The server starts at `http://localhost:8000` and automatically opens your browse
 ## Command Options
 
 ```bash
-kenobix serve [options]
+kenobix [global-options] serve [options]
 
-Options:
+Global Options:
   -d, --database PATH    Path to database file (or auto-detect)
+  -c, --config FILE      Path to config file (overrides auto-discovery)
+  -q, --quiet            Suppress startup messages
+
+Serve Options:
   --host HOST            Bind address (default: 127.0.0.1)
   --port PORT            Port number (default: 8000)
   --no-browser           Don't open browser automatically
   --no-config            Ignore kenobix.toml configuration file
   --validate-config      Validate config file and exit
-  -q, --quiet            Suppress startup messages
 ```
 
 ### Examples
@@ -56,6 +59,9 @@ kenobix serve -d mydb.db --host 0.0.0.0
 
 # Headless mode (no browser, quiet)
 kenobix serve -d mydb.db --no-browser -q
+
+# Use explicit config file (global option)
+kenobix -c /path/to/config.toml serve -d mydb.db
 
 # Validate configuration without starting server
 kenobix serve -d mydb.db --validate-config

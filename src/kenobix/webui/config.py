@@ -106,18 +106,24 @@ def get_config_path() -> Path | None:
     return _config_path
 
 
-def load_config(db_path: str, *, ignore_config: bool = False) -> WebUIConfig:
+def load_config(
+    db_path: str,
+    *,
+    ignore_config: bool = False,
+    config_path: str | Path | None = None,
+) -> WebUIConfig:
     """Load configuration from TOML file or return defaults.
 
     Args:
         db_path: Path to the database file
         ignore_config: If True, skip config file and use defaults
+        config_path: Explicit path to config file (overrides auto-discovery)
 
     Returns:
         WebUIConfig instance
 
     Raises:
-        ConfigError: If config file is invalid
+        ConfigError: If config file is invalid or not found (when explicitly specified)
     """
     global _config, _config_path  # noqa: PLW0603
 
@@ -126,7 +132,17 @@ def load_config(db_path: str, *, ignore_config: bool = False) -> WebUIConfig:
         _config_path = None
         return _config
 
-    config_path = _find_config_file(db_path)
+    # Use explicit config path if provided
+    if config_path is not None:
+        resolved_path = Path(config_path)
+        if not resolved_path.exists():
+            msg = f"Config file not found: {config_path}"
+            raise ConfigError(msg)
+        found_config_path: Path | None = resolved_path
+    else:
+        found_config_path = _find_config_file(db_path)
+
+    config_path = found_config_path
 
     if config_path is None:
         _config = WebUIConfig()

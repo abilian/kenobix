@@ -6,13 +6,17 @@ to JSON format.
 
 from __future__ import annotations
 
+import argparse
 import json
 import sqlite3
 import sys
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from .utils import check_database_exists, get_all_tables
+from .utils import check_database_exists, get_all_tables, resolve_database
+
+if TYPE_CHECKING:
+    pass
 
 
 def dump_table(db_path: str, table_name: str) -> list[dict[str, Any]]:
@@ -111,3 +115,45 @@ def dump_database(
             print(f"Database dumped to: {output_file}", file=sys.stderr)
     else:
         print(json_output)
+
+
+def cmd_dump(args: argparse.Namespace) -> None:
+    """Handle the dump command."""
+    db_path = resolve_database(args)
+    dump_database(
+        db_path,
+        args.output,
+        args.table,
+        compact=getattr(args, "compact", False),
+        quiet=getattr(args, "quiet", False),
+    )
+
+
+def add_dump_command(
+    subparsers: Any, parent_parser: argparse.ArgumentParser
+) -> None:
+    """Add the dump subcommand."""
+    parser = subparsers.add_parser(
+        "dump",
+        help="Dump database contents in JSON format",
+        description="Dump all tables and records from a KenobiX database in human-readable JSON format.",
+        parents=[parent_parser],
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        metavar="FILE",
+        help="Output file path (default: stdout)",
+    )
+    parser.add_argument(
+        "-t",
+        "--table",
+        metavar="TABLE",
+        help="Dump only the specified table",
+    )
+    parser.add_argument(
+        "--compact",
+        action="store_true",
+        help="Output compact JSON (no indentation)",
+    )
+    parser.set_defaults(func=cmd_dump, compact=False)
