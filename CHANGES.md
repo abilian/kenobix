@@ -6,6 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.11.0] - Unreleased
+
+### Added
+- **New `export` command** - Replaces `dump` with multi-format support:
+  - `--format json` (default) - Human-readable JSON export
+  - `--format csv` - Comma-separated values (single table, flattens nested fields)
+  - `--format sql` - SQL statements preserving KenobiX schema (id + JSON data column)
+  - `--format flat-sql` - Denormalized SQL with typed columns (like CSV but as SQL)
+  - Nested JSON values are flattened to dot-notation columns in CSV and flat-sql formats
+  - SQL formats include `CREATE TABLE IF NOT EXISTS` and `CREATE INDEX` statements
+
+- **Global `-c/--config` option** - Specify config file for any command:
+  - `kenobix -c config.toml serve -d mydb.db`
+  - Overrides auto-discovery of `kenobix.toml`
+
+### Changed
+- **CLI refactored** - One module per subcommand for better maintainability:
+  - `cli/export.py` - export command (and deprecated dump alias)
+  - `cli/info.py` - info command
+  - `cli/serve.py` - serve command
+  - `cli/migrate.py` - migrate command
+  - `cli/import_cmd.py` - import command
+
+### Deprecated
+- `dump` command - Use `export` instead (shows deprecation warning)
+
+
 ## [0.10.0] - 2026-01-12
 
 ### Added
