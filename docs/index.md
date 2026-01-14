@@ -10,6 +10,8 @@ Welcome to the KenobiX documentation. KenobiX is a high-performance document dat
 - **[ODM Guide](odm.md)** - Object Document Mapper with dataclasses
 - **[Performance Guide](performance.md)** - Optimization and benchmarks
 - **[API Reference](api-reference.md)** - Complete API documentation
+- **[Web UI](webui.md)** - Browser-based database explorer
+- **[Configuration](config.md)** - Customizing the Web UI
 
 ## Getting Started
 
@@ -72,6 +74,13 @@ db.update('user_id', 1, {'status': 'inactive'})
 - Automatic serialization with cattrs
 - MongoDB-like API (save, get, filter, delete)
 
+### 🌐 Built-in Web UI
+
+- Read-only database explorer
+- Search across collections
+- Customizable via `kenobix.toml`
+- Dark/light theme support
+
 ## Architecture
 
 KenobiX uses SQLite's **generated VIRTUAL columns** to create indexes on JSON fields:
@@ -116,9 +125,14 @@ Real-world measurements on 10,000 documents:
 
 ## Documentation Structure
 
-- **[ODM Guide](odm-guide.md)** - Complete guide to the Object Document Mapper
+- **[ODM Guide](odm.md)** - Complete guide to the Object Document Mapper
+- **[Collections](collections.md)** - Multi-collection support
+- **[Transactions](transactions.md)** - ACID transactions and savepoints
+- **[Relationships](relationships.md)** - ForeignKey and RelatedSet
 - **[Performance Guide](performance.md)** - Benchmarks and optimization tips
 - **[API Reference](api-reference.md)** - Full API documentation
+- **[Web UI](webui.md)** - Browser-based database explorer
+- **[Configuration](config.md)** - Web UI configuration options
 
 ## Requirements
 

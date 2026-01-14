@@ -11,6 +11,7 @@ Based on [KenobiDB](https://github.com/patx/kenobi) by Harrison Erd, enhanced wi
 - [Why KenobiX?](#why-kenobix)
 - [Features](#features)
 - [Command-Line Interface](#command-line-interface)
+- [Web UI](#web-ui)
 - [Performance Benchmarks](#performance-benchmarks)
 - [ACID Compliance](#acid-compliance)
 - [Documentation](#documentation)
@@ -84,6 +85,7 @@ db.update('user_id', 123, {'status': 'active'})
 - **Query Analysis** - Built-in `explain()` for optimization
 - **Zero Runtime Dependencies** - Only Python stdlib (cattrs optional for ODM)
 - **Command-Line Interface** - Inspect and dump databases from the terminal
+- **Built-in Web UI** - Browser-based database explorer with search, dark mode, and customizable views
 
 ## Command-Line Interface
 
@@ -165,6 +167,69 @@ Pseudo-schema (inferred from 100 records):
   tags: array (30% present)
 ```
 
+## Web UI
+
+KenobiX includes an optional **read-only web interface** for exploring database contents in your browser.
+
+### Installation
+
+```bash
+pip install kenobix[webui]
+```
+
+### Quick Start
+
+```bash
+# Start the web server
+kenobix serve -d myapp.db
+
+# Opens http://localhost:8000 in your browser
+```
+
+### Features
+
+- **Collection Browser** - View all collections with document counts
+- **Tabular Display** - Smart column selection with type-aware formatting
+- **Document Search** - Search across all collections or within specific ones
+- **Dark Mode** - Toggle between light and dark themes
+- **JSON Export** - Copy documents to clipboard
+- **Customizable** - Configure columns, labels, and formatters via `kenobix.toml`
+
+### Configuration
+
+Create a `kenobix.toml` file next to your database to customize the UI:
+
+```toml
+[webui]
+theme = "dark"
+per_page = 25
+
+[webui.collections.users]
+display_name = "User Accounts"
+columns = ["_id", "name", "email", "created_at"]
+labels = { name = "Full Name", created_at = "Joined" }
+format = { created_at = "date" }
+
+[webui.collections.orders]
+format = { total = "currency:USD", status = "badge" }
+```
+
+### CLI Options
+
+```bash
+kenobix serve [options]
+
+Options:
+  -d, --database PATH    Database file path
+  --host HOST            Bind address (default: 127.0.0.1)
+  --port PORT            Port number (default: 8000)
+  --no-browser           Don't open browser automatically
+  --no-config            Ignore kenobix.toml configuration
+  --validate-config      Validate config and exit
+```
+
+See [Web UI Guide](docs/webui.md) and [Configuration Reference](docs/config.md) for complete documentation.
+
 ## Performance Benchmarks
 
 Real-world measurements on a 10,000 document dataset:
@@ -208,11 +273,22 @@ with db.transaction():
 - **[ODM Guide](docs/odm.md)** - Complete ODM documentation with examples
 - **[Performance Guide](docs/performance.md)** - Benchmarks and optimization tips
 - **[API Reference](docs/api-reference.md)** - Full API documentation
+- **[Web UI Guide](docs/webui.md)** - Browser-based database explorer
+- **[Configuration](docs/config.md)** - Web UI configuration options
 
 ## Installation
 
 ```bash
 pip install kenobix
+
+# With ODM support (dataclass models)
+pip install kenobix[odm]
+
+# With Web UI (browser-based explorer)
+pip install kenobix[webui]
+
+# All optional features
+pip install kenobix[all]
 ```
 
 Or install from source:
