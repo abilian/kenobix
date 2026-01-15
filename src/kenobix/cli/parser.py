@@ -8,10 +8,12 @@ from __future__ import annotations
 
 import argparse
 
-from .export import add_dump_command, add_export_command
+from .dump import add_dump_command
+from .export import add_export_command
 from .import_cmd import add_import_command
 from .info import add_info_command
 from .migrate import add_migrate_command
+from .schema import add_schema_command
 from .serve import add_serve_command
 
 
@@ -63,10 +65,10 @@ Examples:
   kenobix export -d mydb.db            Export entire database as JSON
   kenobix export -d mydb.db -t users   Export only users table
   kenobix export -t users -f csv       Export users as CSV
-  kenobix export -f sql -o backup.sql  Export as SQL statements
+  kenobix schema -d mydb.db            Show inferred schema for all tables
+  kenobix schema -d mydb.db -t users   Show schema for users table
   kenobix info -d mydb.db -v           Show detailed database info
   kenobix serve -d mydb.db             Start web UI (requires kenobix[webui])
-  kenobix -c config.toml serve         Use explicit config file
 
 Environment:
   KENOBIX_DATABASE    Default database path
@@ -92,7 +94,8 @@ Database Resolution:
     )
 
     add_export_command(subparsers, parent_parser)
-    add_dump_command(subparsers, parent_parser)  # Deprecated alias
+    add_dump_command(subparsers, parent_parser)
+    add_schema_command(subparsers, parent_parser)
     add_info_command(subparsers, parent_parser)
     add_migrate_command(subparsers)
     add_import_command(subparsers)

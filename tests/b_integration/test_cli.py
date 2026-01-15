@@ -24,12 +24,12 @@ from kenobix.cli import (
     cmd_dump,
     cmd_info,
     create_parser,
-    dump_database,
-    dump_table,
+    export_database,
     find_database,
     get_all_tables,
     get_indexed_fields,
     get_table_info,
+    get_table_records,
     infer_json_type,
     infer_pseudo_schema,
     main,
@@ -143,14 +143,14 @@ class TestResolveDatabase:
     def test_uses_explicit_argument(self, db_with_data):
         """Should use database from argument."""
         parser = create_parser()
-        args = parser.parse_args(["dump", "-d", str(db_with_data)])
+        args = parser.parse_args(["dump", "-d", str(db_with_data), "-t", "documents"])
         assert resolve_database(args) == str(db_with_data)
 
     def test_falls_back_to_env_variable(self, db_with_data, monkeypatch):
         """Should fall back to environment variable."""
         monkeypatch.setenv("KENOBIX_DATABASE", str(db_with_data))
         parser = create_parser()
-        args = parser.parse_args(["dump"])
+        args = parser.parse_args(["dump", "-t", "documents"])
         assert resolve_database(args) == str(db_with_data)
 
     def test_exits_when_no_database(self, tmp_path, monkeypatch):
@@ -158,7 +158,7 @@ class TestResolveDatabase:
         monkeypatch.delenv("KENOBIX_DATABASE", raising=False)
         monkeypatch.chdir(tmp_path)
         parser = create_parser()
-        args = parser.parse_args(["dump"])
+        args = parser.parse_args(["dump", "-t", "documents"])
         with pytest.raises(SystemExit) as exc_info:
             resolve_database(args)
         assert exc_info.value.code == 1
@@ -190,23 +190,23 @@ class TestGetAllTables:
             assert not table.startswith("sqlite_")
 
 
-class TestDumpTable:
-    """Tests for dump_table function."""
+class TestGetTableRecords:
+    """Tests for get_table_records function."""
 
-    def test_dumps_all_records(self, db_with_data):
-        """Should dump all records from table."""
-        records = dump_table(str(db_with_data), "documents")
+    def test_gets_all_records(self, db_with_data):
+        """Should get all records from table."""
+        records = get_table_records(str(db_with_data), "documents")
         assert len(records) == 3
 
     def test_includes_id_field(self, db_with_data):
         """Each record should have _id field."""
-        records = dump_table(str(db_with_data), "documents")
+        records = get_table_records(str(db_with_data), "documents")
         for record in records:
             assert "_id" in record
 
     def test_includes_document_data(self, db_with_data):
         """Records should include original document data."""
-        records = dump_table(str(db_with_data), "documents")
+        records = get_table_records(str(db_with_data), "documents")
         names = [r.get("name") for r in records]
         assert "Alice" in names
         assert "Bob" in names
@@ -240,12 +240,12 @@ class TestGetTableInfo:
         assert "indexes" in info
 
 
-class TestDumpDatabase:
-    """Tests for dump_database function."""
+class TestExportDatabase:
+    """Tests for export_database function."""
 
-    def test_dumps_to_stdout(self, db_with_data, capsys):
+    def test_exports_to_stdout(self, db_with_data, capsys):
         """Should print JSON to stdout when no output file specified."""
-        dump_database(str(db_with_data))
+        export_database(str(db_with_data))
         captured = capsys.readouterr()
 
         # Should be valid JSON
@@ -253,19 +253,19 @@ class TestDumpDatabase:
         assert "database" in data
         assert "tables" in data
 
-    def test_dumps_specific_table(self, db_with_collections, capsys):
-        """Should dump only specified table."""
-        dump_database(str(db_with_collections), table_name="users")
+    def test_exports_specific_table(self, db_with_collections, capsys):
+        """Should export only specified table."""
+        export_database(str(db_with_collections), table_name="users")
         captured = capsys.readouterr()
 
         data = json.loads(captured.out)
         assert "users" in data["tables"]
         assert "orders" not in data["tables"]
 
-    def test_dumps_to_file(self, db_with_data, tmp_path):
+    def test_exports_to_file(self, db_with_data, tmp_path):
         """Should write JSON to file when output specified."""
-        output_file = tmp_path / "dump.json"
-        dump_database(str(db_with_data), output_file=str(output_file))
+        output_file = tmp_path / "export.json"
+        export_database(str(db_with_data), output_file=str(output_file))
 
         assert output_file.exists()
         data = json.loads(output_file.read_text())
@@ -273,7 +273,7 @@ class TestDumpDatabase:
 
     def test_compact_output(self, db_with_data, capsys):
         """Compact mode should output JSON without indentation."""
-        dump_database(str(db_with_data), compact=True)
+        export_database(str(db_with_data), compact=True)
         captured = capsys.readouterr()
 
         # Should be valid JSON without newlines in the middle
@@ -284,30 +284,30 @@ class TestDumpDatabase:
 
     def test_quiet_mode(self, db_with_data, tmp_path, capsys):
         """Quiet mode should suppress status messages."""
-        output_file = tmp_path / "dump.json"
-        dump_database(str(db_with_data), output_file=str(output_file), quiet=True)
+        output_file = tmp_path / "export.json"
+        export_database(str(db_with_data), output_file=str(output_file), quiet=True)
         captured = capsys.readouterr()
 
-        # Should not print "Database dumped to:" message
-        assert "dumped to" not in captured.err
+        # Should not print "Database exported to:" message
+        assert "exported to" not in captured.err
 
     def test_exits_on_missing_database(self, tmp_path):
         """Should exit when database doesn't exist."""
         missing = tmp_path / "missing.db"
         with pytest.raises(SystemExit) as exc_info:
-            dump_database(str(missing))
+            export_database(str(missing))
         assert exc_info.value.code == 1
 
     def test_exits_on_invalid_table(self, db_with_data):
         """Should exit when specified table doesn't exist."""
         with pytest.raises(SystemExit) as exc_info:
-            dump_database(str(db_with_data), table_name="nonexistent")
+            export_database(str(db_with_data), table_name="nonexistent")
         assert exc_info.value.code == 1
 
     def test_exits_gracefully_on_empty_database(self, empty_db):
         """Should exit gracefully when database has no tables."""
         with pytest.raises(SystemExit) as exc_info:
-            dump_database(str(empty_db))
+            export_database(str(empty_db))
         assert exc_info.value.code == 0
 
 
@@ -430,14 +430,15 @@ class TestCmdHandlers:
     """Tests for command handler functions."""
 
     def test_cmd_dump(self, db_with_data, capsys):
-        """cmd_dump should call dump_database."""
+        """cmd_dump should show records from a table."""
         parser = create_parser()
-        args = parser.parse_args(["dump", "-d", str(db_with_data)])
+        args = parser.parse_args(["dump", "-d", str(db_with_data), "-t", "documents"])
         cmd_dump(args)
         captured = capsys.readouterr()
 
-        data = json.loads(captured.out)
-        assert "tables" in data
+        # Should show record count header and JSON data
+        assert "records]" in captured.out
+        assert "_id" in captured.out
 
     def test_cmd_info(self, db_with_data, capsys):
         """cmd_info should call show_database_info."""
@@ -454,11 +455,12 @@ class TestMainCLI:
 
     def test_dump_command(self, db_with_data, capsys):
         """Main should handle dump command."""
-        main(["dump", "-d", str(db_with_data)])
+        main(["dump", "-d", str(db_with_data), "-t", "documents"])
         captured = capsys.readouterr()
 
-        data = json.loads(captured.out)
-        assert "tables" in data
+        # Should show human-readable output with records
+        assert "records]" in captured.out
+        assert "_id" in captured.out
 
     def test_info_command(self, db_with_data, capsys):
         """Main should handle info command."""
@@ -469,15 +471,16 @@ class TestMainCLI:
 
     def test_database_option_before_command(self, db_with_data, capsys):
         """Database option should work before command."""
-        main(["-d", str(db_with_data), "dump"])
+        main(["-d", str(db_with_data), "dump", "-t", "documents"])
         captured = capsys.readouterr()
 
-        data = json.loads(captured.out)
-        assert "tables" in data
+        # Should show human-readable dump output
+        assert "records]" in captured.out
+        assert "_id" in captured.out
 
     def test_database_option_after_command(self, db_with_data, capsys):
         """Database option should work after command."""
-        main(["dump", "-d", str(db_with_data)])
+        main(["export", "-d", str(db_with_data)])
         captured = capsys.readouterr()
 
         data = json.loads(captured.out)
@@ -523,27 +526,27 @@ class TestMainCLI:
         captured = capsys.readouterr()
         assert "not found" in captured.err
 
-    def test_dump_with_table_option(self, db_with_collections, capsys):
-        """Dump with -t option should dump only that table."""
-        main(["dump", "-d", str(db_with_collections), "-t", "users"])
+    def test_export_with_table_option(self, db_with_collections, capsys):
+        """Export with -t option should export only that table."""
+        main(["export", "-d", str(db_with_collections), "-t", "users"])
         captured = capsys.readouterr()
 
         data = json.loads(captured.out)
         assert "users" in data["tables"]
         assert "orders" not in data["tables"]
 
-    def test_dump_with_output_option(self, db_with_data, tmp_path, capsys):
-        """Dump with -o option should write to file."""
+    def test_export_with_output_option(self, db_with_data, tmp_path, capsys):
+        """Export with -o option should write to file."""
         output_file = tmp_path / "output.json"
-        main(["dump", "-d", str(db_with_data), "-o", str(output_file)])
+        main(["export", "-d", str(db_with_data), "-o", str(output_file)])
 
         assert output_file.exists()
         data = json.loads(output_file.read_text())
         assert "tables" in data
 
-    def test_dump_compact_option(self, db_with_data, capsys):
-        """Dump with --compact should output minified JSON."""
-        main(["dump", "-d", str(db_with_data), "--compact"])
+    def test_export_compact_option(self, db_with_data, capsys):
+        """Export with --compact should output minified JSON."""
+        main(["export", "-d", str(db_with_data), "--compact"])
         captured = capsys.readouterr()
 
         data = json.loads(captured.out)
@@ -553,15 +556,15 @@ class TestMainCLI:
     def test_quiet_option(self, db_with_data, tmp_path, capsys):
         """Quiet option should suppress status messages."""
         output_file = tmp_path / "output.json"
-        main(["dump", "-d", str(db_with_data), "-o", str(output_file), "-q"])
+        main(["export", "-d", str(db_with_data), "-o", str(output_file), "-q"])
         captured = capsys.readouterr()
 
-        assert "dumped to" not in captured.err
+        assert "exported to" not in captured.err
 
     def test_env_variable_database(self, db_with_data, capsys, monkeypatch):
         """Should use KENOBIX_DATABASE environment variable."""
         monkeypatch.setenv("KENOBIX_DATABASE", str(db_with_data))
-        main(["dump"])
+        main(["export"])
         captured = capsys.readouterr()
 
         data = json.loads(captured.out)
@@ -571,7 +574,7 @@ class TestMainCLI:
         """Should auto-detect single .db file in current directory."""
         monkeypatch.delenv("KENOBIX_DATABASE", raising=False)
         monkeypatch.chdir(db_with_data.parent)
-        main(["dump"])
+        main(["export"])
         captured = capsys.readouterr()
 
         data = json.loads(captured.out)
@@ -607,7 +610,7 @@ class TestEdgeCases:
         conn.commit()
         conn.close()
 
-        records = dump_table(str(db_path), "documents")
+        records = get_table_records(str(db_path), "documents")
         assert len(records) == 1
         assert "_raw_data" in records[0]
         assert records[0]["_raw_data"] == "not valid json"
@@ -618,7 +621,7 @@ class TestEdgeCases:
         db.insert({"name": "日本語", "emoji": "🎉"})
         db.close()
 
-        dump_database(str(db_path))
+        export_database(str(db_path))
         captured = capsys.readouterr()
 
         data = json.loads(captured.out)
@@ -638,7 +641,7 @@ class TestEdgeCases:
         })
         db.close()
 
-        dump_database(str(db_path))
+        export_database(str(db_path))
         captured = capsys.readouterr()
 
         data = json.loads(captured.out)
@@ -651,7 +654,7 @@ class TestEdgeCases:
         monkeypatch.delenv("KENOBIX_DATABASE", raising=False)
         monkeypatch.chdir(tmp_path)
         with pytest.raises(SystemExit) as exc_info:
-            main(["dump"])
+            main(["export"])
         assert exc_info.value.code == 1
         captured = capsys.readouterr()
         assert "No database specified" in captured.err

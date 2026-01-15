@@ -2,17 +2,19 @@
 KenobiX Command Line Interface
 
 Commands:
+    dump      Inspect table data (human-readable, with filtering)
     export    Export database contents (JSON, CSV, or SQL)
-    dump      [Deprecated] Use 'export' instead
+    schema    Show inferred schema of tables
     info      Show database information
     migrate   Migrate data between databases (SQLite/PostgreSQL)
     import    Import database from JSON file
     serve     Start Web UI server (requires kenobix[webui])
 
 Examples:
+    kenobix dump -d mydb.db -t users name=John
     kenobix export -d mydb.db
     kenobix export -d mydb.db -t users -f csv
-    kenobix export -d mydb.db -f sql -o backup.sql
+    kenobix schema -d mydb.db -t users
     KENOBIX_DATABASE=mydb.db kenobix info -v
     kenobix migrate source.db postgresql://localhost/dest
     kenobix import backup.json newdb.db
@@ -22,13 +24,10 @@ Examples:
 from __future__ import annotations
 
 # Re-export all functions for backward compatibility
+from .dump import add_dump_command, cmd_dump, dump_table
 from .export import (
-    add_dump_command,
     add_export_command,
-    cmd_dump,
     cmd_export,
-    dump_database,
-    dump_table,
     export_csv,
     export_database,
     export_flat_sql,
@@ -55,6 +54,7 @@ from .info import (
 )
 from .migrate import add_migrate_command, cmd_migrate
 from .parser import create_parser
+from .schema import add_schema_command, cmd_schema, infer_schema, show_schema
 from .serve import add_serve_command, cmd_serve
 from .utils import (
     check_database_exists,
@@ -69,6 +69,7 @@ __all__ = [
     "add_import_command",
     "add_info_command",
     "add_migrate_command",
+    "add_schema_command",
     "add_serve_command",
     "check_database_exists",
     "cmd_dump",
@@ -76,9 +77,9 @@ __all__ = [
     "cmd_import",
     "cmd_info",
     "cmd_migrate",
+    "cmd_schema",
     "cmd_serve",
     "create_parser",
-    "dump_database",
     "dump_table",
     "export_csv",
     "export_database",
@@ -92,6 +93,7 @@ __all__ = [
     "get_table_records",
     "infer_json_type",
     "infer_pseudo_schema",
+    "infer_schema",
     "main",
     "merge_types",
     "print_column_details",
@@ -101,6 +103,7 @@ __all__ = [
     "show_basic_table_list",
     "show_database_info",
     "show_detailed_table_info",
+    "show_schema",
     "show_single_table_info",
 ]
 

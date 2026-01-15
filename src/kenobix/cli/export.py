@@ -12,7 +12,6 @@ import io
 import json
 import sqlite3
 import sys
-import warnings
 from pathlib import Path
 from typing import Any
 
@@ -524,25 +523,6 @@ def cmd_export(args: argparse.Namespace) -> None:
     )
 
 
-def cmd_dump(args: argparse.Namespace) -> None:
-    """Handle the dump command (deprecated, use export)."""
-    warnings.warn(
-        "The 'dump' command is deprecated. Use 'export' instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    # For backward compatibility, dump always uses JSON format
-    db_path = resolve_database(args)
-    export_database(
-        db_path,
-        args.output,
-        args.table,
-        format="json",
-        compact=getattr(args, "compact", False),
-        quiet=getattr(args, "quiet", False),
-    )
-
-
 def add_export_command(
     subparsers: Any, parent_parser: argparse.ArgumentParser
 ) -> None:
@@ -602,38 +582,3 @@ Examples:
         help="Output compact JSON (no indentation, json format only)",
     )
     parser.set_defaults(func=cmd_export, compact=False, format="json")
-
-
-def add_dump_command(
-    subparsers: Any, parent_parser: argparse.ArgumentParser
-) -> None:
-    """Add the dump subcommand (deprecated alias for export)."""
-    parser = subparsers.add_parser(
-        "dump",
-        help="[Deprecated] Use 'export' instead",
-        description="Deprecated: Use 'kenobix export' instead. This command will be removed in a future version.",
-        parents=[parent_parser],
-    )
-    parser.add_argument(
-        "-o",
-        "--output",
-        metavar="FILE",
-        help="Output file path (default: stdout)",
-    )
-    parser.add_argument(
-        "-t",
-        "--table",
-        metavar="TABLE",
-        help="Dump only the specified table",
-    )
-    parser.add_argument(
-        "--compact",
-        action="store_true",
-        help="Output compact JSON (no indentation)",
-    )
-    parser.set_defaults(func=cmd_dump, compact=False)
-
-
-# Backward compatibility aliases
-dump_table = get_table_records
-dump_database = export_database

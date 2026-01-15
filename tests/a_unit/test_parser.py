@@ -97,7 +97,7 @@ class TestExportCommand:
 
 
 class TestDumpCommand:
-    """Tests for deprecated dump command parser."""
+    """Tests for dump command parser."""
 
     @pytest.fixture
     def parser(self):
@@ -105,9 +105,54 @@ class TestDumpCommand:
         return create_parser()
 
     def test_dump_command_exists(self, parser):
-        """Should have dump command (deprecated alias)."""
-        args = parser.parse_args(["-d", "test.db", "dump"])
+        """Should have dump command."""
+        args = parser.parse_args(["-d", "test.db", "dump", "-t", "users"])
         assert args.command == "dump"
+        assert args.table == "users"
+
+    def test_dump_requires_table(self, parser):
+        """Should require -t/--table option."""
+        with pytest.raises(SystemExit):
+            parser.parse_args(["-d", "test.db", "dump"])
+
+    def test_dump_limit_option(self, parser):
+        """Should have -n/--limit option with default."""
+        args = parser.parse_args(["-d", "test.db", "dump", "-t", "users"])
+        assert args.limit == 20
+
+        args = parser.parse_args(["-d", "test.db", "dump", "-t", "users", "-n", "50"])
+        assert args.limit == 50
+
+    def test_dump_offset_option(self, parser):
+        """Should have --offset option."""
+        args = parser.parse_args(["-d", "test.db", "dump", "-t", "users", "--offset", "10"])
+        assert args.offset == 10
+
+    def test_dump_one_option(self, parser):
+        """Should have -1/--one option."""
+        args = parser.parse_args(["-d", "test.db", "dump", "-t", "users", "-1"])
+        assert args.one is True
+
+    def test_dump_count_option(self, parser):
+        """Should have --count option."""
+        args = parser.parse_args(["-d", "test.db", "dump", "-t", "users", "--count"])
+        assert args.count is True
+
+    def test_dump_format_option(self, parser):
+        """Should have -f/--format option with choices."""
+        args = parser.parse_args(["-d", "test.db", "dump", "-t", "users"])
+        assert args.format == "json"
+
+        args = parser.parse_args(["-d", "test.db", "dump", "-t", "users", "-f", "table"])
+        assert args.format == "table"
+
+        args = parser.parse_args(["-d", "test.db", "dump", "-t", "users", "-f", "compact"])
+        assert args.format == "compact"
+
+    def test_dump_selectors(self, parser):
+        """Should accept selector arguments."""
+        args = parser.parse_args(["-d", "test.db", "dump", "-t", "users", "name=John", "age>25"])
+        assert args.selectors == ["name=John", "age>25"]
 
 
 class TestInfoCommand:
