@@ -3,7 +3,7 @@
 all: test lint
 
 install:
-	uv sync
+	uv sync --all-groups --all-extras
 
 test:
 	pytest tests -v
