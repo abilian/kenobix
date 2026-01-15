@@ -87,7 +87,11 @@ build-backend = "uv_build"
 #
 [tool.pytest.ini_options]
 addopts = "-q --tb=short"
+testpaths = ["tests"]
 markers = [
+    "unit: Unit tests (fast, no database)",
+    "integration: Integration tests (with database)",
+    "e2e: End-to-end tests (full workflows)",
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
 ]
 

@@ -1,121 +1,96 @@
 """
-.. moduleauthor:: Harrison Erd <harrisonerd@gmail.com>
+Shared pytest fixtures and configuration.
 
-Database fixture and temp folder preparation fixtures
-
-.. py:data:: pytest_plugins
-   :type: list[str]
-   :value: []
-
-   pytest plugins to activate
-
+Test pyramid structure:
+- a_unit/: Unit tests (fast, isolated, no DB)
+- b_integration/: Integration tests (with database)
+- c_e2e/: End-to-end tests (full workflows)
 """
 
-import shutil
-from collections.abc import Sequence
-from pathlib import PurePath
+from __future__ import annotations
+
+from pathlib import Path
 
 import pytest
 
 from kenobix import KenobiX
 
-pytest_plugins = []
+
+def pytest_configure(config):
+    """Register custom markers."""
+    config.addinivalue_line("markers", "unit: Unit tests (fast, no database)")
+    config.addinivalue_line("markers", "integration: Integration tests (with database)")
+    config.addinivalue_line("markers", "e2e: End-to-end tests (full workflows)")
+    config.addinivalue_line("markers", "slow: Tests that take longer to run")
 
 
-@pytest.fixture
-def prepare_folders_files(request):
-    """Prepare folders and files within folder."""
+def pytest_collection_modifyitems(config, items):
+    """Auto-mark tests based on directory."""
+    for item in items:
+        # Get the test file path relative to tests/
+        test_path = Path(item.fspath)
+        parts = test_path.parts
 
-    set_folders = set()
+        if "a_unit" in parts:
+            item.add_marker(pytest.mark.unit)
+        elif "b_integration" in parts:
+            item.add_marker(pytest.mark.integration)
+        elif "c_e2e" in parts:
+            item.add_marker(pytest.mark.e2e)
 
-    def _method(seq_rel_paths, tmp_path):
-        """Creates folders and empty files
 
-        :param seq_rel_paths: Relative file paths. Creates folders as well
-        :type seq_rel_paths:
-
-           collections.abc.Sequence[str | pathlib.Path] | collections.abc.MutableSet[str | pathlib.Path]
-
-        :param tmp_path: Start absolute path
-        :type tmp_path: pathlib.Path
-        :returns: Set of absolute paths of created files
-        :rtype: set[pathlib.Path]
-        """
-        set_abs_paths = set()
-        is_seq = seq_rel_paths is not None and (
-            (isinstance(seq_rel_paths, Sequence) and not isinstance(seq_rel_paths, str))
-            or isinstance(seq_rel_paths, set)
-        )
-        if is_seq:
-            for posix in seq_rel_paths:
-                if isinstance(posix, str):
-                    abs_path = tmp_path.joinpath(*posix.split("/"))
-                elif issubclass(type(posix), PurePath):
-                    if not posix.is_absolute():
-                        abs_path = tmp_path / posix
-                    else:  # pragma: no cover
-                        # already absolute
-                        abs_path = posix
-                else:
-                    abs_path = None
-
-                if abs_path is not None:
-                    set_abs_paths.add(abs_path)
-                    set_folders.add(abs_path.parent)
-                    abs_path.parent.mkdir(parents=True, exist_ok=True)
-                    abs_path.touch()
-        else:
-            abs_path = None
-
-        return set_abs_paths
-
-    yield _method
-
-    # cleanup
-    if request.node.test_report.outcome == "passed":
-        for abspath_folder in set_folders:
-            shutil.rmtree(abspath_folder, ignore_errors=True)
+# Common fixtures
 
 
 @pytest.fixture
 def db_path(tmp_path):
-    """
-    Returns:
-        pathlib.Path: path to database within pytest managed temporary folder
-    """
-    return tmp_path.joinpath("test_kenobi.db")
+    """Provide temporary database path."""
+    return tmp_path / "test.db"
 
 
 @pytest.fixture
 def create_db(db_path):
-    """Per test function create database in pytest managed temporary folder
-
-    Usage
-
-    .. code-block:: text
-
-       import pytest
-       def test_sometest(create_db):
-           db = create_db()
-
-    Returns:
-        KenobiX: database instance
     """
-    db = KenobiX(db_path)
+    Create a KenobiX database instance.
 
-    def _fcn():
-        """Initializes database. After test function close database.
+    Usage:
+        def test_something(create_db):
+            db = create_db()
+            db.insert({"key": "value"})
+    """
+    db = KenobiX(str(db_path))
 
-        - purposefully induce a failure with :code:`assert False`
-
-        - go to the temp folder
-
-        - activate the venv
-
-        - open a REPR with :command:`python`
-
-        """
+    def _factory():
         return db
 
-    yield _fcn
+    yield _factory
     db.close()
+
+
+@pytest.fixture
+def db_with_data(db_path):
+    """Create a database with sample data."""
+    db = KenobiX(str(db_path), indexed_fields=["name", "category"])
+
+    db.insert({"name": "Alice", "age": 30, "category": "user"})
+    db.insert({"name": "Bob", "age": 25, "category": "user"})
+    db.insert({"name": "Widget", "price": 9.99, "category": "product"})
+
+    db.close()
+    return db_path
+
+
+@pytest.fixture
+def db_with_collections(db_path):
+    """Create a database with multiple collections."""
+    db = KenobiX(str(db_path))
+
+    users = db.collection("users", indexed_fields=["user_id", "email"])
+    users.insert({"user_id": 1, "name": "Alice", "email": "alice@example.com"})
+    users.insert({"user_id": 2, "name": "Bob", "email": "bob@example.com"})
+
+    orders = db.collection("orders", indexed_fields=["order_id"])
+    orders.insert({"order_id": 101, "user_id": 1, "total": 99.99})
+
+    db.close()
+    return db_path
