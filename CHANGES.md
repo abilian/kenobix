@@ -6,10 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
-## [0.11.0] - 2026/01/15
+## [0.10.1] - 2026/01/16
 
 ### Added
-- **New `export` command** - Replaces `dump` with multi-format support:
+- **New `export` command** - Machine-readable data export with multi-format support:
   - `--format json` (default) - Human-readable JSON export
   - `--format csv` - Comma-separated values (single table, flattens nested fields)
   - `--format sql` - SQL statements preserving KenobiX schema (id + JSON data column)
@@ -17,20 +17,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Nested JSON values are flattened to dot-notation columns in CSV and flat-sql formats
   - SQL formats include `CREATE TABLE IF NOT EXISTS` and `CREATE INDEX` statements
 
+- **Repurposed `dump` command** - Human-readable data inspection with filtering:
+  - Designed for terminal viewing, debugging, and data exploration
+  - **Selector syntax** for filtering records:
+    - `field=value` - Equals
+    - `field!=value` - Not equals
+    - `field>value`, `field>=value`, `field<value`, `field<=value` - Comparisons
+    - `field~pattern` - LIKE pattern (use % as wildcard)
+    - `field=null`, `field!=null` - NULL checks
+    - `field=true`, `field=false` - Boolean values
+    - Nested fields: `address.city=Paris`
+  - **Output formats**:
+    - `json` (default) - Pretty-printed, syntax-highlighted JSON
+    - `table` - Tabular format with column headers
+    - `compact` - One JSON object per line (grep-friendly)
+  - Examples:
+    - `kenobix dump -d mydb.db -t users` - Browse first 20 users
+    - `kenobix dump -d mydb.db -t users name=John active=true` - Filter
+    - `kenobix dump -d mydb.db -t users "age>25" --count` - Count matches
+    - `kenobix dump -d mydb.db -t users -f compact | grep admin` - Grep-friendly
+
+- **New `schema` command** - Infer and display implicit schema of tables:
+  - Analyzes JSON data to determine field types and presence
+  - Supports nested fields with dot notation
+  - Options: `--sample N` for large tables, `-f json` for JSON output, `-v` for examples
+
 - **Global `-c/--config` option** - Specify config file for any command:
   - `kenobix -c config.toml serve -d mydb.db`
   - Overrides auto-discovery of `kenobix.toml`
 
-### Changed
-- **CLI refactored** - One module per subcommand for better maintainability:
-  - `cli/export.py` - export command (and deprecated dump alias)
-  - `cli/info.py` - info command
-  - `cli/serve.py` - serve command
-  - `cli/migrate.py` - migrate command
-  - `cli/import_cmd.py` - import command
-
-### Deprecated
-- `dump` command - Use `export` instead (shows deprecation warning)
+### Testing
+- 75 new tests for dump command (34 unit, 31 integration, 10 parser)
+- Total test count: 643 tests
 
 
 ## [0.10.0] - 2026-01-12
