@@ -15,23 +15,25 @@ nox.options.sessions = ["check", "test"]
 @nox.session(python=PYTHON_VERSIONS)
 def test(session: nox.Session) -> None:
     """Run the test suite."""
-    session.run("uv", "sync", "--active", external=True)
+    uv_sync(session)
     session.run("pytest", "tests", *session.posargs)
 
 
 @nox.session(python=DEFAULT_PYTHON)
 def check(session: nox.Session) -> None:
     """Run all checks (lint, typecheck, tests)."""
-    session.run("uv", "sync", "--active", external=True)
+    uv_sync(session)
 
     # Lint
-    session.run("ruff", "check", "src", "tests")
-    session.run("ruff", "format", "--check", ".")
+    session.run("ruff", "check")
+    session.run("ruff", "format", "--check")
 
     # Type check
+    session.run("ty", "check", "src")
+    session.run("pyrefly", "check", "src")
     session.run("mypy", "src")
-    session.run("ty", "check", "src")
-    session.run("ty", "check", "src")
+    # should be: session.run("mypy", "--strict", "src")
 
-    # Tests
-    session.run("pytest", "tests", *session.posargs)
+
+def uv_sync(session: nox.Session):
+    session.run("uv", "sync", "--all-groups", "--all-extras", "--active", external=True)
