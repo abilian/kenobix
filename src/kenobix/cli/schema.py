@@ -299,10 +299,11 @@ def show_schema(
 
     if output_format == "json":
         # JSON output: single object with all tables
-        result = {"database": db_path, "tables": {}}
+        tables_dict: dict[str, Any] = {}
         for table in tables:
             schema = infer_schema(db_path, table, sample_size)
-            result["tables"][table] = schema
+            tables_dict[table] = schema
+        result = {"database": db_path, "tables": tables_dict}
         print(format_schema_json(result))
     else:
         # Text output

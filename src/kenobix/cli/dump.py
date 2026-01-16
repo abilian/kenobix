@@ -95,6 +95,7 @@ def parse_selector(selector_str: str) -> Selector:
         return Selector(field=field, operator=op, value=False)
 
     # Try to parse as number
+    value: str | int | float
     try:
         if "." in value_str:
             value = float(value_str)
@@ -177,7 +178,7 @@ def build_query(
 
     # Build WHERE clause
     if selectors:
-        where_parts = []
+        where_parts: list[str] = []
         for selector in selectors:
             fragment, selector_params = selector_to_sql(selector)
             where_parts.append(fragment)
@@ -229,7 +230,7 @@ def colorize_json(obj: Any, use_color: bool = True) -> str:
         if isinstance(v, dict):
             if not v:
                 return "{}"
-            pairs = []
+            pairs: list[str] = []
             for key, val in v.items():
                 colored_key = f"{c['key']}\"{key}\"{c['reset']}"
                 colored_val = colorize_value(val, indent + 1)
@@ -304,7 +305,7 @@ def format_table(
 
     # Rows
     for record in records:
-        cells = []
+        cells: list[str] = []
         for col in sorted_cols:
             val = record.get(col, "")
             val_str = _value_to_str(val)
@@ -453,7 +454,7 @@ def cmd_dump(args: argparse.Namespace) -> None:
     db_path = resolve_database(args)
 
     # Check if table is specified
-    table_name = getattr(args, "table", None)
+    table_name: str | None = getattr(args, "table", None)
     if not table_name:
         print("Error: Table name required. Use -t TABLE", file=sys.stderr)
         sys.exit(1)
@@ -461,9 +462,10 @@ def cmd_dump(args: argparse.Namespace) -> None:
     # Detect if stdout is a TTY for color default
     use_color = sys.stdout.isatty() and not getattr(args, "no_color", False)
 
+    # table_name is guaranteed to be str after the check above
     dump_table(
         db_path,
-        table_name,
+        str(table_name),
         selectors=getattr(args, "selectors", None),
         limit=getattr(args, "limit", 20),
         offset=getattr(args, "offset", None),
